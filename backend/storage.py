@@ -70,3 +70,36 @@ def delete_draft(draft_id: str) -> bool:
         f.unlink()
         return True
     return False
+
+
+# ========== 수신거부 관리 ==========
+
+UNSUB = Path(config.UNSUBSCRIBED_FILE)
+
+
+def load_unsubscribed() -> set[str]:
+    if not UNSUB.exists():
+        return set()
+    return {line.strip().lower() for line in UNSUB.read_text(encoding="utf-8").splitlines() if line.strip()}
+
+
+def add_unsubscribed(email: str) -> bool:
+    email = email.strip().lower()
+    if not email or "@" not in email:
+        return False
+    UNSUB.parent.mkdir(parents=True, exist_ok=True)
+    existing = load_unsubscribed()
+    if email in existing:
+        return False
+    with UNSUB.open("a", encoding="utf-8") as f:
+        f.write(email + "\n")
+    return True
+
+
+def remove_unsubscribed(email: str) -> bool:
+    if not UNSUB.exists():
+        return False
+    email = email.strip().lower()
+    lines = [l for l in UNSUB.read_text(encoding="utf-8").splitlines() if l.strip().lower() != email]
+    UNSUB.write_text(("\n".join(lines) + "\n") if lines else "", encoding="utf-8")
+    return True

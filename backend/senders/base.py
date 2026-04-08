@@ -1,5 +1,13 @@
 from dataclasses import dataclass, field
 from typing import Protocol
+from urllib.parse import quote
+from .. import config
+
+
+def personalize(html: str, email: str) -> str:
+    """[[UNSUB_URL]] 플레이스홀더를 수신자별 수신거부 URL로 치환"""
+    url = f"{config.PUBLIC_BASE_URL}/api/unsubscribe?email={quote(email)}"
+    return html.replace("[[UNSUB_URL]]", url)
 
 
 @dataclass

@@ -196,9 +196,68 @@ async def parse_recipients(file: UploadFile = File(...)):
 def post_send(req: SendRequest):
     html = renderer.render(req.template, req.data)
     sender = senders.get_sender(req.sender)
-    rcpts = [Recipient(email=r["email"], name=r.get("name")) for r in req.recipients]
+
+    # 수신거부 필터링
+    unsub = storage.load_unsubscribed()
+    filtered = [r for r in req.recipients if r["email"].strip().lower() not in unsub]
+    skipped = len(req.recipients) - len(filtered)
+
+    rcpts = [Recipient(email=r["email"], name=r.get("name")) for r in filtered]
     res = sender.send(html, req.subject, rcpts, req.from_addr, req.from_name)
-    return {"sent": res.sent, "failed": res.failed, "errors": res.errors[:20]}
+    return {
+        "sent": res.sent,
+        "failed": res.failed,
+        "skipped": skipped,
+        "errors": res.errors[:20],
+    }
+
+
+# ========== 수신거부 ==========
+
+class UnsubIn(BaseModel):
+    email: str
+
+
+@app.get("/api/unsubscribe", response_class=HTMLResponse)
+def unsubscribe_landing(email: str):
+    """이메일에서 수신거부 링크 클릭 시 진입하는 페이지"""
+    storage.add_unsubscribed(email)
+    return HTMLResponse(f"""<!DOCTYPE html>
+<html lang="ko"><head><meta charset="UTF-8"><title>수신거부 완료</title>
+<style>
+  body {{ font-family: 'Apple SD Gothic Neo','Malgun Gothic',sans-serif; background:#f7f8fa; margin:0; padding:0; display:flex; align-items:center; justify-content:center; min-height:100vh; }}
+  .card {{ background:#fff; border-radius:14px; box-shadow:0 12px 32px rgba(15,23,42,0.08); padding:48px 56px; max-width:440px; text-align:center; }}
+  .icon {{ width:64px; height:64px; border-radius:50%; background:#ecf5f0; color:#1a6b4a; display:inline-flex; align-items:center; justify-content:center; font-size:32px; margin-bottom:18px; }}
+  h1 {{ font-size:20px; color:#0f172a; margin:0 0 8px; letter-spacing:-0.3px; }}
+  p {{ color:#475569; font-size:14px; line-height:1.7; margin:0 0 18px; }}
+  .email {{ display:inline-block; background:#f7f8fa; border:1px solid #e8eaed; padding:6px 14px; border-radius:8px; font-size:13px; color:#1a6b4a; font-weight:600; }}
+  .footer {{ margin-top:24px; font-size:12px; color:#94a3b8; }}
+</style></head><body>
+  <div class="card">
+    <div class="icon">✓</div>
+    <h1>수신거부 처리가 완료되었습니다</h1>
+    <p>아래 이메일 주소는 더 이상 전인교육학회 뉴스레터를<br>수신하지 않습니다.</p>
+    <div class="email">{email}</div>
+    <div class="footer">잘못 클릭하셨다면 사무국으로 연락 주세요.<br>info@humancompletion.org</div>
+  </div>
+</body></html>""")
+
+
+@app.get("/api/unsubscribed")
+def list_unsubscribed():
+    return {"emails": sorted(storage.load_unsubscribed())}
+
+
+@app.post("/api/unsubscribed")
+def post_unsubscribe(body: UnsubIn):
+    added = storage.add_unsubscribed(body.email)
+    return {"ok": True, "added": added}
+
+
+@app.delete("/api/unsubscribed/{email}")
+def delete_unsubscribed(email: str):
+    storage.remove_unsubscribed(email)
+    return {"ok": True}
 
 
 @app.get("/api/manual")

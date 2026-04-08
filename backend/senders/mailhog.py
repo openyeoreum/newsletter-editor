@@ -2,7 +2,7 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import formataddr
-from .base import SendResult
+from .base import SendResult, personalize
 from .. import config
 
 
@@ -17,7 +17,7 @@ class MailHogSender:
                         msg["Subject"] = subject
                         msg["From"] = formataddr((from_name, from_addr or "noreply@local"))
                         msg["To"] = formataddr((r.name or "", r.email))
-                        msg.attach(MIMEText(html, "html", "utf-8"))
+                        msg.attach(MIMEText(personalize(html, r.email), "html", "utf-8"))
                         s.sendmail(from_addr or "noreply@local", [r.email], msg.as_string())
                         result.sent += 1
                     except Exception as e:

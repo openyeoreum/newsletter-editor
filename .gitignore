@@ -21,6 +21,7 @@ npm-debug.log*
 drafts/*.json
 !drafts/sample.json
 recipients/*.csv
+!recipients/unsubscribed.csv
 
 # OS
 .DS_Store

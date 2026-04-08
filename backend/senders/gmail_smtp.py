@@ -2,7 +2,7 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import formataddr
-from .base import Recipient, SendResult
+from .base import Recipient, SendResult, personalize
 from .. import config
 
 
@@ -24,7 +24,7 @@ class GmailSender:
                         msg["Subject"] = subject
                         msg["From"] = formataddr((from_name, user))
                         msg["To"] = formataddr((r.name or "", r.email))
-                        msg.attach(MIMEText(html, "html", "utf-8"))
+                        msg.attach(MIMEText(personalize(html, r.email), "html", "utf-8"))
                         s.sendmail(user, [r.email], msg.as_string())
                         result.sent += 1
                     except Exception as e:

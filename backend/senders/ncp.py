@@ -7,7 +7,7 @@ import hashlib
 import hmac
 import time
 import httpx
-from .base import SendResult
+from .base import SendResult, personalize
 from .. import config
 
 API_HOST = "https://mail.apigw.ntruss.com"
@@ -31,35 +31,35 @@ class NCPSender:
             result.failed = len(recipients)
             return result
 
-        # NCP는 단일 요청에 최대 1,000명 수신자 가능
-        ts = str(int(time.time() * 1000))
-        sig = _make_signature("POST", API_PATH, ts, ak, sk)
-        headers = {
-            "Content-Type": "application/json",
-            "x-ncp-apigw-timestamp": ts,
-            "x-ncp-iam-access-key": ak,
-            "x-ncp-apigw-signature-v2": sig,
-        }
-        body = {
-            "senderAddress": sender,
-            "senderName": from_name or config.NCP_SENDER_NAME,
-            "title": subject,
-            "body": html,
-            "individual": True,
-            "advertising": False,
-            "recipients": [
-                {"address": r.email, "name": r.name or "", "type": "R"}
-                for r in recipients
-            ],
-        }
-        try:
-            r = httpx.post(API_HOST + API_PATH, headers=headers, json=body, timeout=60.0)
-            if r.status_code in (200, 201):
-                result.sent = len(recipients)
-            else:
-                result.failed = len(recipients)
-                result.errors.append(f"NCP {r.status_code}: {r.text[:300]}")
-        except Exception as e:
-            result.failed = len(recipients)
-            result.errors.append(f"NCP request failed: {e}")
+        # 수신거부 링크가 수신자별로 달라야 하므로 1명씩 발송
+        for rcpt in recipients:
+            try:
+                ts = str(int(time.time() * 1000))
+                sig = _make_signature("POST", API_PATH, ts, ak, sk)
+                headers = {
+                    "Content-Type": "application/json",
+                    "x-ncp-apigw-timestamp": ts,
+                    "x-ncp-iam-access-key": ak,
+                    "x-ncp-apigw-signature-v2": sig,
+                }
+                body = {
+                    "senderAddress": sender,
+                    "senderName": from_name or config.NCP_SENDER_NAME,
+                    "title": subject,
+                    "body": personalize(html, rcpt.email),
+                    "individual": True,
+                    "advertising": False,
+                    "recipients": [
+                        {"address": rcpt.email, "name": rcpt.name or "", "type": "R"}
+                    ],
+                }
+                resp = httpx.post(API_HOST + API_PATH, headers=headers, json=body, timeout=60.0)
+                if resp.status_code in (200, 201):
+                    result.sent += 1
+                else:
+                    result.failed += 1
+                    result.errors.append(f"{rcpt.email}: NCP {resp.status_code} {resp.text[:200]}")
+            except Exception as e:
+                result.failed += 1
+                result.errors.append(f"{rcpt.email}: {e}")
         return result

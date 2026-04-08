@@ -29,4 +29,7 @@ export const api = {
     body: JSON.stringify(payload),
   }).then(J),
   manual: () => fetch('/api/manual').then(J),
+  unsubscribed: () => fetch('/api/unsubscribed').then(J),
+  addUnsubscribed: (email) => fetch('/api/unsubscribed', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) }).then(J),
+  removeUnsubscribed: (email) => fetch(`/api/unsubscribed/${encodeURIComponent(email)}`, { method: 'DELETE' }).then(J),
 };

@@ -57,6 +57,8 @@ export default function App() {
   const [recipients, setRecipients] = useState([]);
   const [sendStatus, setSendStatus] = useState('');
   const [testEmail, setTestEmail] = useState('');
+  const [unsubModal, setUnsubModal] = useState(false);
+  const [unsubList, setUnsubList] = useState([]);
   const [saveModal, setSaveModal] = useState(false);
   const [saveModalName, setSaveModalName] = useState('');
 
@@ -90,6 +92,7 @@ export default function App() {
   useEffect(() => {
     api.templates().then(setTemplates).catch(() => {});
     api.senders().then(setSenders).catch(() => {});
+    refreshUnsub();
     api.drafts().then(async list => {
       setDrafts(list);
       const def = list.find(d => d.name === DEFAULT_DRAFT_NAME);
@@ -108,6 +111,7 @@ export default function App() {
   }, []);
 
   const refreshDrafts = () => api.drafts().then(setDrafts).catch(() => {});
+  const refreshUnsub = () => api.unsubscribed().then(r => setUnsubList(r.emails || [])).catch(() => {});
 
   useEffect(() => {
     if (editingRef.current) return; // 미리보기 인라인 편집 중에는 재렌더 X
@@ -300,7 +304,8 @@ export default function App() {
     setSendStatus('발송 중...');
     try {
       const r = await api.send({ sender, template, subject, from_addr: fromAddr, from_name: fromName, recipients, data });
-      setSendStatus(`✓ ${r.sent}건 성공 / ${r.failed}건 실패` + (r.errors.length ? '\n\n' + r.errors.join('\n') : ''));
+      const skippedTxt = r.skipped ? ` · ${r.skipped}건 수신거부 제외` : '';
+      setSendStatus(`✓ ${r.sent}건 성공 / ${r.failed}건 실패${skippedTxt}` + (r.errors.length ? '\n\n' + r.errors.join('\n') : ''));
     } catch (e) { setSendStatus('실패: ' + e.message); }
   };
 
@@ -618,6 +623,14 @@ export default function App() {
                 )}
               </div>
 
+              <div className="section">
+                <div className="section-title">수신거부 명단</div>
+                <p className="muted" style={{ marginBottom: 8 }}>수신거부한 이메일은 발송 시 자동으로 제외됩니다.</p>
+                <button className="secondary" style={{ width: '100%' }} onClick={() => { refreshUnsub(); setUnsubModal(true); }}>
+                  <Icon name="drafts" size={14}/> 수신거부 명단 보기 ({unsubList.length}명)
+                </button>
+              </div>
+
               <div className="dispatch-card">
                 <div className="dispatch-card-head">
                   <div className="dispatch-card-title">전체 발송</div>
@@ -675,6 +688,37 @@ export default function App() {
             <div className="modal-footer">
               <button className="secondary" onClick={()=>setSaveModal(false)}>취소</button>
               <button onClick={confirmSave}><Icon name="check"/> 저장</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {unsubModal && (
+        <div className="modal-backdrop" onClick={()=>setUnsubModal(false)}>
+          <div className="modal" style={{ width: 520 }} onClick={e=>e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-icon"><Icon name="mail" size={20}/></div>
+              <div>
+                <div className="modal-title">수신거부 명단</div>
+                <div className="modal-sub">총 {unsubList.length}명 · 발송 시 자동으로 제외됩니다.</div>
+              </div>
+            </div>
+            <div className="modal-body" style={{ maxHeight: '50vh', overflowY: 'auto' }}>
+              {unsubList.length === 0 ? (
+                <div className="empty"><div className="icon"><Icon name="check" size={36}/></div>수신거부한 회원이 없습니다</div>
+              ) : (
+                unsubList.map(email => (
+                  <div className="draft-item" key={email}>
+                    <div className="draft-item-info">
+                      <div className="draft-item-name" style={{ fontFamily: "'SF Mono', Menlo, monospace", fontSize: 12 }}>{email}</div>
+                    </div>
+                    <button className="danger sm" onClick={async ()=>{ await api.removeUnsubscribed(email); refreshUnsub(); }}>해제</button>
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="modal-footer">
+              <button className="secondary" onClick={()=>setUnsubModal(false)}>닫기</button>
             </div>
           </div>
         </div>

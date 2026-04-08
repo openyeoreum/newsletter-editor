@@ -24,3 +24,6 @@ CLOUDINARY_API_SECRET = os.getenv("CLOUDINARY_API_SECRET", "")
 
 DRAFTS_DIR = os.getenv("DRAFTS_DIR", "/data/drafts")
 TEMPLATES_DIR = os.getenv("TEMPLATES_DIR", "/app/templates")
+RECIPIENTS_DIR = os.getenv("RECIPIENTS_DIR", "/data/recipients")
+UNSUBSCRIBED_FILE = os.getenv("UNSUBSCRIBED_FILE", "/data/recipients/unsubscribed.csv")
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "http://localhost:8000")
