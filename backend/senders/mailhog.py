@@ -7,7 +7,7 @@ from .. import config
 
 
 class MailHogSender:
-    def send(self, html, subject, recipients, from_addr, from_name="전인교육학회"):
+    def send(self, html, subject, recipients, from_addr, from_name="전인교육학회", on_progress=None):
         result = SendResult()
         try:
             with smtplib.SMTP(config.MAILHOG_HOST, config.MAILHOG_PORT) as s:
@@ -23,6 +23,8 @@ class MailHogSender:
                     except Exception as e:
                         result.failed += 1
                         result.errors.append(f"{r.email}: {e}")
+                    if on_progress:
+                        on_progress(sent=result.sent, failed=result.failed)
         except Exception as e:
             result.errors.append(f"MailHog: {e}")
             result.failed = len(recipients) - result.sent

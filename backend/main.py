@@ -7,7 +7,8 @@ from pydantic import BaseModel
 import cloudinary
 import cloudinary.uploader
 
-from . import config, storage, renderer, senders
+import threading
+from . import config, storage, renderer, senders, jobs
 from .senders.base import Recipient
 
 app = FastAPI(title="전인교육학회 뉴스레터 API")
@@ -192,24 +193,61 @@ async def parse_recipients(file: UploadFile = File(...)):
     return {"recipients": out, "count": len(out)}
 
 
+def _run_send_job(job_id: str, req: SendRequest, html: str, rcpts: list[Recipient], skipped: int):
+    jobs.update(job_id, status="running", skipped=skipped)
+    try:
+        sender = senders.get_sender(req.sender)
+
+        def on_progress(**kwargs):
+            jobs.update(job_id, **kwargs)
+
+        res = sender.send(html, req.subject, rcpts, req.from_addr, req.from_name, on_progress=on_progress)
+        for err in res.errors[:50]:
+            jobs.update(job_id, errors_append=err)
+        jobs.update(
+            job_id,
+            sent=res.sent,
+            failed=res.failed,
+            status="done",
+            finished_at=__import__("time").time(),
+            message=f"발송 완료 — {res.sent}건 성공 / {res.failed}건 실패 / {skipped}건 수신거부 제외",
+        )
+    except Exception as e:
+        jobs.update(job_id, status="failed", errors_append=str(e), finished_at=__import__("time").time(),
+                    message=f"발송 실패: {e}")
+
+
 @app.post("/api/send")
 def post_send(req: SendRequest):
     html = renderer.render(req.template, req.data)
-    sender = senders.get_sender(req.sender)
 
     # 수신거부 필터링
     unsub = storage.load_unsubscribed()
     filtered = [r for r in req.recipients if r["email"].strip().lower() not in unsub]
     skipped = len(req.recipients) - len(filtered)
-
     rcpts = [Recipient(email=r["email"], name=r.get("name")) for r in filtered]
-    res = sender.send(html, req.subject, rcpts, req.from_addr, req.from_name)
-    return {
-        "sent": res.sent,
-        "failed": res.failed,
-        "skipped": skipped,
-        "errors": res.errors[:20],
-    }
+
+    if not rcpts:
+        return {"job_id": None, "sent": 0, "failed": 0, "skipped": skipped, "message": "발송할 수신자가 없습니다 (모두 수신거부됨)"}
+
+    # 작업 등록 + 백그라운드 스레드 시작
+    job = jobs.create_job(total=len(rcpts))
+    t = threading.Thread(target=_run_send_job, args=(job.id, req, html, rcpts, skipped), daemon=True)
+    t.start()
+    return {"job_id": job.id, "total": len(rcpts), "skipped": skipped}
+
+
+@app.get("/api/send/{job_id}")
+def get_send_status(job_id: str):
+    job = jobs.get_job(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    return job.to_dict()
+
+
+@app.get("/api/jobs")
+def get_jobs():
+    return jobs.list_jobs()
 
 
 # ========== 수신거부 ==========

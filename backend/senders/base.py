@@ -31,4 +31,5 @@ class Sender(Protocol):
         recipients: list[Recipient],
         from_addr: str,
         from_name: str = "전인교육학회",
+        on_progress=None,
     ) -> SendResult: ...

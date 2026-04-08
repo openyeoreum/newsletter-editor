@@ -59,6 +59,8 @@ export default function App() {
   const [testEmail, setTestEmail] = useState('');
   const [unsubModal, setUnsubModal] = useState(false);
   const [unsubList, setUnsubList] = useState([]);
+  const [sendJob, setSendJob] = useState(null); // 진행 중 작업 정보
+  const sendPollRef = useRef();
   const [saveModal, setSaveModal] = useState(false);
   const [saveModalName, setSaveModalName] = useState('');
 
@@ -300,21 +302,51 @@ export default function App() {
 
   const onSend = async () => {
     if (!recipients.length) { alert('수신자 CSV를 먼저 업로드하세요'); return; }
-    if (!confirm(`${recipients.length}명에게 [${sender}]로 발송할까요?`)) return;
-    setSendStatus('발송 중...');
+    if (!confirm(`${recipients.length}명에게 [${sender}]로 발송할까요?\n\n10만 명 발송 시 NCP는 약 30~60분 소요됩니다.`)) return;
+    setSendStatus('');
     try {
       const r = await api.send({ sender, template, subject, from_addr: fromAddr, from_name: fromName, recipients, data });
-      const skippedTxt = r.skipped ? ` · ${r.skipped}건 수신거부 제외` : '';
-      setSendStatus(`✓ ${r.sent}건 성공 / ${r.failed}건 실패${skippedTxt}` + (r.errors.length ? '\n\n' + r.errors.join('\n') : ''));
+      if (!r.job_id) {
+        setSendStatus(r.message || '발송할 수신자가 없습니다');
+        return;
+      }
+      setSendJob({ id: r.job_id, total: r.total, skipped: r.skipped, sent: 0, failed: 0, status: 'running', progress_percent: 0, current_chunk: 0, total_chunks: 0 });
+      // 폴링 시작
+      const poll = async () => {
+        try {
+          const s = await api.sendStatus(r.job_id);
+          setSendJob(s);
+          if (s.status === 'done' || s.status === 'failed') {
+            clearInterval(sendPollRef.current);
+            const skippedTxt = s.skipped ? ` · ${s.skipped}건 수신거부 제외` : '';
+            setSendStatus(`${s.status === 'done' ? '✓' : '✗'} ${s.sent}건 성공 / ${s.failed}건 실패${skippedTxt}` + (s.errors?.length ? '\n\n' + s.errors.slice(0, 10).join('\n') : ''));
+          }
+        } catch (e) { /* 일시적 오류는 무시 */ }
+      };
+      poll();
+      sendPollRef.current = setInterval(poll, 2000);
     } catch (e) { setSendStatus('실패: ' + e.message); }
   };
+
+  // 컴포넌트 unmount 시 폴링 정리
+  useEffect(() => () => { if (sendPollRef.current) clearInterval(sendPollRef.current); }, []);
 
   const onTestSend = async () => {
     if (!testEmail || !testEmail.includes('@')) { alert('테스트 발송할 이메일 주소를 입력하세요'); return; }
     setSendStatus('테스트 발송 중...');
     try {
       const r = await api.send({ sender, template, subject, from_addr: fromAddr, from_name: fromName, recipients: [{ email: testEmail }], data });
-      setSendStatus(`테스트 ${r.sent ? '✓ 성공' : '✗ 실패'} → ${testEmail}` + (r.errors.length ? '\n\n' + r.errors.join('\n') : ''));
+      if (!r.job_id) { setSendStatus(r.message || '발송 실패'); return; }
+      // 짧은 폴링
+      let tries = 0;
+      const poll = setInterval(async () => {
+        tries++;
+        const s = await api.sendStatus(r.job_id);
+        if (s.status === 'done' || s.status === 'failed' || tries > 30) {
+          clearInterval(poll);
+          setSendStatus(`테스트 ${s.sent ? '✓ 성공' : '✗ 실패'} → ${testEmail}` + (s.errors?.length ? '\n' + s.errors.join('\n') : ''));
+        }
+      }, 1500);
     } catch (e) { setSendStatus('실패: ' + e.message); }
   };
 
@@ -646,10 +678,23 @@ export default function App() {
                     <div className="stat-label">템플릿</div>
                   </div>
                 </div>
-                <button className="dispatch-btn" onClick={onSend} disabled={!recipients.length}>
+                <button className="dispatch-btn" onClick={onSend} disabled={!recipients.length || sendJob?.status === 'running'}>
                   <Icon name="send" size={15}/>
-                  <span>{recipients.length ? `${recipients.length}명에게 발송하기` : '수신자를 먼저 업로드하세요'}</span>
+                  <span>
+                    {sendJob?.status === 'running'
+                      ? `발송 중... ${sendJob.sent + sendJob.failed}/${sendJob.total}`
+                      : recipients.length ? `${recipients.length}명에게 발송하기` : '수신자를 먼저 업로드하세요'}
+                  </span>
                 </button>
+                {sendJob && sendJob.status === 'running' && (
+                  <div className="progress-wrap">
+                    <div className="progress-bar"><div className="progress-fill" style={{ width: `${sendJob.progress_percent || 0}%` }}/></div>
+                    <div className="progress-meta">
+                      <span>{sendJob.progress_percent || 0}% · 청크 {sendJob.current_chunk}/{sendJob.total_chunks || '?'}</span>
+                      <span>경과 {sendJob.elapsed || 0}초</span>
+                    </div>
+                  </div>
+                )}
                 {sendStatus && <div className="status-box">{sendStatus}</div>}
               </div>
             </>
@@ -742,7 +787,6 @@ export default function App() {
           {(viewport === 'desktop' || viewport === 'both') && (
             <div className={`preview-frame ${viewport === 'both' ? 'both-desktop' : 'desktop'}`}>
               <div className="preview-bar">
-                <div className="preview-dots"><span></span><span></span><span></span></div>
                 <span className="preview-label"><Icon name="monitor" size={12}/> Desktop · {template.toUpperCase()}</span>
               </div>
               <iframe ref={iframeRef} srcDoc={html} title="preview-desktop" onLoad={onIframeLoad} />
@@ -751,7 +795,6 @@ export default function App() {
           {(viewport === 'mobile' || viewport === 'both') && (
             <div className={`preview-frame ${viewport === 'both' ? 'both-mobile' : 'mobile'}`}>
               <div className="preview-bar">
-                <div className="preview-dots"><span></span><span></span><span></span></div>
                 <span className="preview-label"><Icon name="smartphone" size={12}/> Mobile · 390px</span>
               </div>
               <iframe srcDoc={html} title="preview-mobile" />

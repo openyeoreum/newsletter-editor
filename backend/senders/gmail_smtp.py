@@ -7,7 +7,7 @@ from .. import config
 
 
 class GmailSender:
-    def send(self, html, subject, recipients, from_addr, from_name="전인교육학회"):
+    def send(self, html, subject, recipients, from_addr, from_name="전인교육학회", on_progress=None):
         result = SendResult()
         user = config.GMAIL_USER or from_addr
         pw = config.GMAIL_APP_PASSWORD
@@ -30,6 +30,8 @@ class GmailSender:
                     except Exception as e:
                         result.failed += 1
                         result.errors.append(f"{r.email}: {e}")
+                    if on_progress:
+                        on_progress(sent=result.sent, failed=result.failed)
         except Exception as e:
             result.errors.append(f"SMTP: {e}")
             result.failed = len(recipients) - result.sent
