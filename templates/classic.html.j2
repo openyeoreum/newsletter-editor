@@ -1,0 +1,114 @@
+{% import '_macros.html.j2' as m %}
+{{ m.doc_head('전인교육학회 뉴스레터') }}
+<body style="margin:0; padding:0; background-color:#f5f5f5; font-family:'Apple SD Gothic Neo','Malgun Gothic','맑은 고딕',sans-serif;">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#f5f5f5;">
+  <tr><td align="center" style="padding:16px 10px;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="620" class="mobile-full" style="max-width:620px; width:100%; background-color:#ffffff;">
+
+      {{ m.header(volume, issue_date, web_view_url, org_name, org_subtitle) }}
+      {{ m.greeting_block(greeting) }}
+
+      <tr><td style="padding:0 40px 28px;" class="mobile-padding"><div style="border-top:1px solid #eeeeee;">&nbsp;</div></td></tr>
+
+      {% for a in articles %}
+        {% set layout = a.layout or ['hero','image_left','image_left','card_banner','image_left_tall'][loop.index0] %}
+
+        {% if layout == 'hero' %}
+        <tr><td style="padding:0 40px;" class="mobile-padding">
+          <img src="{{ a.image }}" data-img="article-{{ loop.index0 }}" alt="{{ a.title }}" width="540" style="width:100%; height:auto; display:block; border-radius:10px;" class="mobile-img">
+          <div style="padding:20px 0 8px;">{{ m.badge(a.badge_text, '#1a6b4a', '#e8f0ec', 'articles.' ~ loop.index0 ~ '.badge_text') }}</div>
+          <div style="padding:4px 0; color:#1a1a1a; font-size:24px; font-weight:800; line-height:1.35; letter-spacing:-0.5px;"><a href="{{ a.link }}" style="color:inherit; text-decoration:none;"><span data-field="articles.{{ loop.index0 }}.title">{{ a.title }}</span></a></div>
+          <div style="padding:8px 0 0; color:#666; font-size:15px; line-height:1.7;"><span data-field="articles.{{ loop.index0 }}.summary">{{ a.summary | replace('
+','<br>') | safe }}</span></div>
+          <div style="padding:12px 0 0;">
+            <span style="color:#aaa; font-size:12px;"><span data-field="articles.{{ loop.index0 }}.meta">{{ a.meta }}</span></span>
+            <span style="padding-left:12px;"><a href="{{ a.link }}" style="color:#1a6b4a; font-size:13px; font-weight:600; text-decoration:none;">자세히 보기 &rarr;</a></span>
+          </div>
+        </td></tr>
+
+        {% elif layout == 'image_left' %}
+        <tr><td style="padding:0 40px;" class="mobile-padding">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"><tr>
+            <td width="180" class="mobile-stack" style="vertical-align:top;">
+              <img src="{{ a.image }}" data-img="article-{{ loop.index0 }}" alt="{{ a.title }}" width="180" style="width:180px; height:130px; display:block; border-radius:10px;" class="mobile-img">
+            </td>
+            <td width="20" class="mobile-hide">&nbsp;</td>
+            <td class="mobile-stack" style="vertical-align:top;">
+              {{ m.badge(a.badge_text, '#2e8b57', '#f0f4f1', 'articles.' ~ loop.index0 ~ '.badge_text') }}
+              <div style="padding-top:8px; color:#1a1a1a; font-size:18px; font-weight:700; line-height:1.4;"><a href="{{ a.link }}" style="color:inherit; text-decoration:none;"><span data-field="articles.{{ loop.index0 }}.title">{{ a.title }}</span></a></div>
+              <div style="padding-top:8px; color:#777; font-size:14px; line-height:1.65;"><span data-field="articles.{{ loop.index0 }}.summary">{{ a.summary | replace('
+','<br>') | safe }}</span></div>
+              <div style="padding-top:10px;"><span style="color:#aaa; font-size:12px;"><span data-field="articles.{{ loop.index0 }}.meta">{{ a.meta }}</span></span>
+                <span style="padding-left:12px;"><a href="{{ a.link }}" style="color:#1a6b4a; font-size:13px; font-weight:600; text-decoration:none;">자세히 보기 &rarr;</a></span>
+              </div>
+            </td>
+          </tr></table>
+        </td></tr>
+
+        {% elif layout == 'image_right' %}
+        <tr><td style="padding:0 40px;" class="mobile-padding">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"><tr>
+            <td class="mobile-stack" style="vertical-align:top;">
+              {{ m.badge(a.badge_text, '#1a6b4a', '#e8f0ec', 'articles.' ~ loop.index0 ~ '.badge_text') }}
+              <div style="padding-top:8px; color:#1a1a1a; font-size:18px; font-weight:700; line-height:1.4;"><a href="{{ a.link }}" style="color:inherit; text-decoration:none;"><span data-field="articles.{{ loop.index0 }}.title">{{ a.title }}</span></a></div>
+              <div style="padding-top:8px; color:#777; font-size:14px; line-height:1.65;"><span data-field="articles.{{ loop.index0 }}.summary">{{ a.summary | replace('
+','<br>') | safe }}</span></div>
+              <div style="padding-top:10px;"><span style="color:#aaa; font-size:12px;"><span data-field="articles.{{ loop.index0 }}.meta">{{ a.meta }}</span></span>
+                <span style="padding-left:12px;"><a href="{{ a.link }}" style="color:#1a6b4a; font-size:13px; font-weight:600; text-decoration:none;">자세히 보기 &rarr;</a></span>
+              </div>
+            </td>
+            <td width="20" class="mobile-hide">&nbsp;</td>
+            <td width="180" class="mobile-stack" style="vertical-align:top;">
+              <img src="{{ a.image }}" data-img="article-{{ loop.index0 }}" alt="{{ a.title }}" width="180" style="width:180px; height:130px; display:block; border-radius:10px;" class="mobile-img">
+            </td>
+          </tr></table>
+        </td></tr>
+
+        {% elif layout == 'card_banner' %}
+        <tr><td style="padding:0 40px;" class="mobile-padding">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-radius:10px; overflow:hidden; border:1px solid #eee;">
+            <tr><td><img src="{{ a.image }}" data-img="article-{{ loop.index0 }}" alt="{{ a.title }}" width="540" style="width:100%; height:auto; display:block; border-radius:10px;" class="mobile-img"></td></tr>
+            <tr><td style="padding:22px 24px 24px;">
+              {{ m.badge(a.badge_text, '#b8860b', '#fdf6ec', 'articles.' ~ loop.index0 ~ '.badge_text') }}
+              <div style="padding-top:10px; color:#1a1a1a; font-size:18px; font-weight:700; line-height:1.4;"><a href="{{ a.link }}" style="color:inherit; text-decoration:none;"><span data-field="articles.{{ loop.index0 }}.title">{{ a.title }}</span></a></div>
+              <div style="padding-top:8px; color:#777; font-size:14px; line-height:1.65;"><span data-field="articles.{{ loop.index0 }}.summary">{{ a.summary | replace('
+','<br>') | safe }}</span></div>
+              <div style="padding-top:10px;"><span style="color:#aaa; font-size:12px;"><span data-field="articles.{{ loop.index0 }}.meta">{{ a.meta }}</span></span>
+                <span style="padding-left:12px;"><a href="{{ a.link }}" style="color:#1a6b4a; font-size:13px; font-weight:600; text-decoration:none;">자세히 보기 &rarr;</a></span>
+              </div>
+            </td></tr>
+          </table>
+        </td></tr>
+
+        {% elif layout == 'image_left_tall' %}
+        <tr><td style="padding:0 40px;" class="mobile-padding">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"><tr>
+            <td width="140" class="mobile-stack" style="vertical-align:top;">
+              <img src="{{ a.image }}" data-img="article-{{ loop.index0 }}" alt="{{ a.title }}" width="140" style="width:140px; height:190px; display:block; border-radius:10px;" class="mobile-img-tall">
+            </td>
+            <td width="20" class="mobile-hide">&nbsp;</td>
+            <td class="mobile-stack" style="vertical-align:top;">
+              {{ m.badge(a.badge_text, '#4a5a8a', '#eef0f8', 'articles.' ~ loop.index0 ~ '.badge_text') }}
+              <div style="padding-top:8px; color:#1a1a1a; font-size:18px; font-weight:700; line-height:1.4;"><a href="{{ a.link }}" style="color:inherit; text-decoration:none;"><span data-field="articles.{{ loop.index0 }}.title">{{ a.title }}</span></a></div>
+              <div style="padding-top:8px; color:#777; font-size:14px; line-height:1.65;"><span data-field="articles.{{ loop.index0 }}.summary">{{ a.summary | replace('
+','<br>') | safe }}</span></div>
+              <div style="padding-top:10px;"><span style="color:#aaa; font-size:12px;"><span data-field="articles.{{ loop.index0 }}.meta">{{ a.meta }}</span></span>
+                <span style="padding-left:12px;"><a href="{{ a.link }}" style="color:#1a6b4a; font-size:13px; font-weight:600; text-decoration:none;">자세히 보기 &rarr;</a></span>
+              </div>
+            </td>
+          </tr></table>
+        </td></tr>
+        {% endif %}
+
+        {% if not loop.last %}
+        <tr><td style="padding:28px 40px;" class="mobile-padding"><div style="border-top:1px solid #eee;">&nbsp;</div></td></tr>
+        {% endif %}
+      {% endfor %}
+
+      <tr><td style="padding:16px 0 0; font-size:0; line-height:0;">&nbsp;</td></tr>
+      {{ m.footer(footer) }}
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>

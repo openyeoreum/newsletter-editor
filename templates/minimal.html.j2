@@ -1,0 +1,48 @@
+{% import '_macros.html.j2' as m %}
+{{ m.doc_head('전인교육학회 뉴스레터 - Minimal') }}
+<body style="margin:0; padding:0; background-color:#fafafa; font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif;">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#fafafa;">
+  <tr><td align="center" style="padding:30px 10px;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="620" class="mobile-full" style="max-width:620px; width:100%; background-color:#ffffff;">
+
+      {{ m.header(volume, issue_date, web_view_url, org_name, org_subtitle) }}
+      {{ m.greeting_minimal(greeting) }}
+
+      <tr><td style="padding:0 40px 20px;" class="mobile-padding">
+        <div style="font-size:11px; color:#999; letter-spacing:2px;">CONTENTS</div>
+        <div style="border-top:1px solid #1a1a1a; margin-top:8px;">&nbsp;</div>
+      </td></tr>
+
+      {# 균일 리스트형: 좌측 썸네일 + 우측 텍스트. 마지막 기사는 세로 이미지로 #}
+      {% for a in articles %}
+      {% set _w = 140 if loop.last else 100 %}
+      {% set _h = 190 if loop.last else 100 %}
+      <tr><td style="padding:0 40px 24px;" class="mobile-padding">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"><tr>
+          <td width="{{ _w }}" class="mobile-stack" style="vertical-align:top;">
+            <img src="{{ a.image }}" data-img="article-{{ loop.index0 }}" alt="{{ a.title }}" width="{{ _w }}" style="width:{{ _w }}px; height:{{ _h }}px; display:block; object-fit:cover; border-radius:10px;" class="{% if loop.last %}mobile-img-tall{% else %}mobile-img{% endif %}">
+          </td>
+          <td width="20" class="mobile-hide">&nbsp;</td>
+          <td class="mobile-stack" style="vertical-align:top;">
+            <div style="font-size:10px; color:#1a6b4a; letter-spacing:1.5px; font-weight:700; text-transform:uppercase;"><span data-field="articles.{{ loop.index0 }}.badge_text">{{ a.badge_text }}</span> · {{ '%02d' % loop.index }}</div>
+            <div style="padding-top:6px; color:#1a1a1a; font-size:17px; font-weight:700; line-height:1.4; letter-spacing:-0.3px;">
+              <a href="{{ a.link }}" style="color:inherit; text-decoration:none;"><span data-field="articles.{{ loop.index0 }}.title">{{ a.title }}</span></a>
+            </div>
+            <div style="padding-top:6px; color:#888; font-size:13px; line-height:1.6;"><span data-field="articles.{{ loop.index0 }}.summary">{{ a.summary | replace('
+','<br>') | safe }}</span></div>
+            <div style="padding-top:6px; color:#bbb; font-size:11px;"><span data-field="articles.{{ loop.index0 }}.meta">{{ a.meta }}</span></div>
+          </td>
+        </tr></table>
+      </td></tr>
+      {% if not loop.last %}
+      <tr><td style="padding:0 40px 24px;" class="mobile-padding"><div style="border-top:1px dashed #e8e8e8;">&nbsp;</div></td></tr>
+      {% endif %}
+      {% endfor %}
+
+      <tr><td style="padding:24px 0 0; font-size:0;">&nbsp;</td></tr>
+      {{ m.footer(footer) }}
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>

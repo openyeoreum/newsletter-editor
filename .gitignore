@@ -1,0 +1,36 @@
+# 환경변수 (절대 커밋 금지 — API 키 포함)
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# Node
+node_modules/
+dist/
+.vite/
+npm-debug.log*
+
+# 사용자 데이터 (선택 — 같이 올리고 싶으면 이 줄 지우세요)
+drafts/*.json
+!drafts/sample.json
+recipients/*.csv
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+.claude/
+*.swp
+
+# 로그
+*.log

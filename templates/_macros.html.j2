@@ -1,0 +1,205 @@
+{# ============================================================
+   공통 매크로 — 헤더, 푸터, 회장 인사말
+   3개 템플릿(classic/magazine/minimal)에서 import 하여 사용
+   ============================================================ #}
+
+{% macro header(volume, issue_date, web_view_url, org_name='전인교육학회', org_subtitle='Academic Society for Human Completion') %}
+<tr>
+  <td style="padding:32px 40px 24px;" class="mobile-padding">
+    <a href="{{ web_view_url }}" style="font-size:20px; font-weight:800; color:#1a1a1a; letter-spacing:-0.3px; text-decoration:none;"><span data-field="org_name">{{ org_name|default('전인교육학회') }}</span></a>
+    <span style="font-size:11px; color:#999999; letter-spacing:0.3px; padding-left:8px;" data-field="org_subtitle">{{ org_subtitle|default('Academic Society for Human Completion') }}</span>
+  </td>
+</tr>
+<tr>
+  <td style="padding:0 40px;" class="mobile-padding">
+    <div style="border-top:3px solid #1a6b4a; font-size:0; line-height:0; height:0;">&nbsp;</div>
+  </td>
+</tr>
+<tr>
+  <td style="padding:20px 40px 28px;" class="mobile-padding">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+      <tr>
+        <td style="color:#888888; font-size:13px; line-height:1.5;">Vol. {{ volume }} &middot; {{ issue_date }}</td>
+        <td align="right" style="color:#888888; font-size:13px;">
+          <a href="{{ web_view_url }}" style="color:#1a6b4a; text-decoration:none; font-weight:600;">웹에서 보기</a>
+        </td>
+      </tr>
+    </table>
+  </td>
+</tr>
+{% endmacro %}
+
+
+{% macro greeting_block(greeting) %}
+<tr>
+  <td style="padding:0 40px 32px;" class="mobile-padding">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#f8faf9; border-radius:12px; overflow:hidden;">
+      <tr>
+        <td style="padding:32px 32px 28px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+            <tr>
+              <td style="padding-bottom:20px;">
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td style="vertical-align:middle;">
+                      <img src="{{ greeting.photo }}" alt="{{ greeting.name }}" data-img="greeting" width="80" height="80" style="width:80px; height:80px; display:block; border:2px solid #e0ede5; border-radius:50%;">
+                    </td>
+                    <td style="vertical-align:middle; padding-left:14px;">
+                      <span style="color:#1a1a1a; font-size:15px; font-weight:700; display:block; line-height:1.3;" data-field="greeting.name">{{ greeting.name }}</span>
+                      <span style="color:#888888; font-size:12px; display:block; line-height:1.4; margin-top:2px;" data-field="greeting.title">{{ greeting.title }}</span>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="color:#2a2a2a; font-size:16px; font-weight:500; line-height:1.85; border-top:1px solid #e8efe9; padding-top:18px;">
+                {% set _parts = greeting.body.split('<!--more-->') %}
+                <div data-field-html="greeting.body_main">{{ _parts[0] | replace('\n','<br>') | safe }}</div>
+                {% if _parts|length > 1 %}
+                <details style="margin-top:10px;">
+                  <summary style="cursor:pointer; color:#1a6b4a; font-size:13px; font-weight:700; padding:8px 0; list-style:none; display:inline-block;">펼쳐보기 ▾</summary>
+                  <div style="padding-top:6px;" data-field-html="greeting.body_more">{{ _parts[1] | replace('\n','<br>') | safe }}</div>
+                </details>
+                {% endif %}
+              </td>
+            </tr>
+            <tr>
+              <td style="padding-top:18px; color:#1a6b4a; font-size:13px; font-weight:600; line-height:1.5;" data-field="greeting.signature">
+                {{ greeting.signature }}
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </td>
+</tr>
+{% endmacro %}
+
+
+{% macro greeting_banner(greeting) %}
+{# Magazine 템플릿용: 와이드 배너형 인사말 #}
+<tr>
+  <td style="padding:0 40px 28px;" class="mobile-padding">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:linear-gradient(135deg,#1a6b4a 0%,#2e8b57 100%); background-color:#1a6b4a; border-radius:12px; overflow:hidden;">
+      <tr>
+        <td style="padding:36px 32px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+            <tr>
+              <td width="90" style="vertical-align:top;">
+                <img src="{{ greeting.photo }}" alt="{{ greeting.name }}" data-img="greeting" width="80" height="80" style="width:80px; height:80px; display:block; border:3px solid #ffffff; border-radius:50%;">
+              </td>
+              <td style="vertical-align:top; padding-left:20px; color:#ffffff;">
+                <div style="font-size:13px; opacity:0.85; letter-spacing:1px;">PRESIDENT'S MESSAGE</div>
+                <div style="font-size:18px; font-weight:800; padding-top:4px;" data-field="greeting.name">{{ greeting.name }}</div>
+                <div style="font-weight:400; font-size:13px; opacity:0.85; padding-top:2px;" data-field="greeting.title">{{ greeting.title }}</div>
+              </td>
+            </tr>
+            <tr>
+              <td colspan="2" style="padding-top:18px; color:#ffffff;">
+                <div style="font-size:16px; font-weight:500; line-height:1.85;">
+                  {% set _parts = greeting.body.split('<!--more-->') %}
+                  <div data-field-html="greeting.body_main">{{ _parts[0] | replace('\n','<br>') | safe }}</div>
+                  {% if _parts|length > 1 %}
+                  <details style="margin-top:10px;">
+                    <summary style="cursor:pointer; color:#ffffff; font-size:13px; font-weight:700; padding:8px 0; list-style:none; display:inline-block; opacity:0.95;">펼쳐보기 ▾</summary>
+                    <div style="padding-top:6px;" data-field-html="greeting.body_more">{{ _parts[1] | replace('\n','<br>') | safe }}</div>
+                  </details>
+                  {% endif %}
+                </div>
+                <div style="padding-top:14px; font-size:13px; font-weight:700;" data-field="greeting.signature">{{ greeting.signature }}</div>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </td>
+</tr>
+{% endmacro %}
+
+
+{% macro greeting_minimal(greeting) %}
+{# Minimal 템플릿용: 사진 없이 텍스트 중심 #}
+<tr>
+  <td style="padding:0 40px 36px;" class="mobile-padding">
+    <div style="font-size:11px; color:#999; letter-spacing:2px; padding-bottom:10px;">FROM THE PRESIDENT</div>
+    <div style="color:#1a1a1a; font-size:16px; font-weight:500; line-height:1.9;">
+      {% set _parts = greeting.body.split('<!--more-->') %}
+      <div data-field-html="greeting.body_main">{{ _parts[0] | replace('\n','<br>') | safe }}</div>
+      {% if _parts|length > 1 %}
+      <details style="margin-top:10px;">
+        <summary style="cursor:pointer; color:#1a6b4a; font-size:13px; font-weight:700; padding:8px 0; list-style:none; display:inline-block;">펼쳐보기 ▾</summary>
+        <div style="padding-top:6px;" data-field-html="greeting.body_more">{{ _parts[1] | replace('\n','<br>') | safe }}</div>
+      </details>
+      {% endif %}
+    </div>
+    <div style="padding-top:18px; color:#1a6b4a; font-size:13px; font-weight:600;" data-field="greeting.signature">— {{ greeting.signature }}</div>
+  </td>
+</tr>
+{% endmacro %}
+
+
+{% macro footer(footer) %}
+<tr>
+  <td style="padding:0 40px;" class="mobile-padding">
+    <div style="border-top:1px solid #eeeeee; font-size:0; height:0;">&nbsp;</div>
+  </td>
+</tr>
+<tr>
+  <td style="padding:20px 40px 24px;" class="mobile-padding">
+    <div style="color:#1a1a1a; font-size:14px; font-weight:700;"><a href="{{ web_view_url }}" style="color:#1a1a1a; text-decoration:none;">전인교육학회</a></div>
+    <div style="color:#aaaaaa; font-size:11px; padding-bottom:14px;">Academic Society for Human Completion</div>
+    <div style="color:#999999; font-size:12px; line-height:1.8;">
+      <span data-field="footer.address">{{ footer.address }}</span><br>
+      <span data-field="footer.contact">{{ footer.contact }}</span>
+    </div>
+    <div style="padding-top:16px;">
+      {% for link in footer.links %}
+        <a href="{{ link.url }}" style="color:#1a6b4a; font-size:12px; text-decoration:none; font-weight:600;">{{ link.text }}</a>
+        {% if not loop.last %}<span style="color:#dddddd; padding:0 8px;">|</span>{% endif %}
+      {% endfor %}
+      <span style="color:#dddddd; padding:0 8px;">|</span>
+      <a href="{{ unsubscribe_url|default('#') }}" style="color:#999999; font-size:12px; text-decoration:underline;">수신거부</a>
+    </div>
+  </td>
+</tr>
+{% endmacro %}
+
+
+{% macro badge(text, color, bg, field='') %}
+<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+  <td style="background-color:{{ bg }}; border-radius:4px; padding:3px 10px;">
+    <span style="font-size:11px; font-weight:700; color:{{ color }}; letter-spacing:0.5px;"{% if field %} data-field="{{ field }}"{% endif %}>{{ text }}</span>
+  </td>
+</tr></table>
+{% endmacro %}
+
+
+{% macro doc_head(title) %}
+<!DOCTYPE html>
+<html lang="ko" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>{{ title }}</title>
+  <!--[if mso]><noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript><![endif]-->
+  <style type="text/css">
+    body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+    table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+    img { -ms-interpolation-mode: bicubic; border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }
+    body { margin: 0 !important; padding: 0 !important; width: 100% !important; }
+    a { color: #1a6b4a; }
+    @media only screen and (max-width: 600px) {
+      .mobile-full { width: 100% !important; }
+      .mobile-padding { padding-left: 20px !important; padding-right: 20px !important; }
+      .mobile-stack { display: block !important; width: 100% !important; }
+      .mobile-img { width: 100% !important; height: auto !important; }
+      .mobile-img-tall { width: 50% !important; max-width: 200px !important; height: auto !important; margin: 0 auto !important; display: block !important; }
+      .mobile-hide { display: none !important; }
+    }
+  </style>
+</head>
+{% endmacro %}
