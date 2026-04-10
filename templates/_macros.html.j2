@@ -148,7 +148,7 @@
 {% endmacro %}
 
 
-{% macro footer(footer) %}
+{% macro footer(footer, web_view_url='') %}
 <tr>
   <td style="padding:0 40px;" class="mobile-padding">
     <div style="border-top:1px solid #eeeeee; font-size:0; height:0;">&nbsp;</div>
@@ -167,6 +167,8 @@
         <a href="{{ link.url }}" style="color:#1a6b4a; font-size:12px; text-decoration:none; font-weight:600;">{{ link.text }}</a>
         {% if not loop.last %}<span style="color:#dddddd; padding:0 8px;">|</span>{% endif %}
       {% endfor %}
+      <span style="color:#dddddd; padding:0 8px;">|</span>
+      <a href="{{ web_view_url }}" style="color:#1a6b4a; font-size:12px; text-decoration:none; font-weight:600;">수신동의</a>
       <span style="color:#dddddd; padding:0 8px;">|</span>
       <a href="[[UNSUB_URL]]" style="color:#999999; font-size:12px; text-decoration:underline;">수신거부</a>
     </div>

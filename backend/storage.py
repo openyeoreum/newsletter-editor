@@ -1,6 +1,9 @@
+import csv
+import io
 import json
 import os
 import uuid
+from datetime import datetime
 from pathlib import Path
 from . import config
 
@@ -127,3 +130,66 @@ def remove_unsubscribed(email: str) -> bool:
     lines = [l for l in UNSUB.read_text(encoding="utf-8").splitlines() if l.strip().lower() != email]
     UNSUB.write_text(("\n".join(lines) + "\n") if lines else "", encoding="utf-8")
     return True
+
+
+# ========== 구독자(수신동의) 관리 ==========
+
+SUBS = Path(config.SUBSCRIBERS_FILE)
+_SUBS_HEADER = ["email", "name", "organization", "subscribed_at"]
+
+
+def _ensure_subs_file():
+    SUBS.parent.mkdir(parents=True, exist_ok=True)
+    if not SUBS.exists():
+        SUBS.write_text(",".join(_SUBS_HEADER) + "\n", encoding="utf-8")
+
+
+def load_subscribers() -> list[dict]:
+    if not SUBS.exists():
+        return []
+    rows = []
+    reader = csv.DictReader(io.StringIO(SUBS.read_text(encoding="utf-8")))
+    for row in reader:
+        if row.get("email"):
+            rows.append({k: (row.get(k) or "").strip() for k in _SUBS_HEADER})
+    return rows
+
+
+def add_subscriber(email: str, name: str = "", organization: str = "") -> bool:
+    email = email.strip().lower()
+    if not email or "@" not in email:
+        return False
+    _ensure_subs_file()
+    existing = {s["email"] for s in load_subscribers()}
+    if email in existing:
+        return False
+    with SUBS.open("a", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=_SUBS_HEADER)
+        writer.writerow({
+            "email": email,
+            "name": name.strip(),
+            "organization": organization.strip(),
+            "subscribed_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        })
+    return True
+
+
+def remove_subscriber(email: str) -> bool:
+    if not SUBS.exists():
+        return False
+    email = email.strip().lower()
+    rows = [s for s in load_subscribers() if s["email"] != email]
+    _ensure_subs_file()
+    with SUBS.open("w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=_SUBS_HEADER)
+        writer.writeheader()
+        writer.writerows(rows)
+    return True
+
+
+def export_subscribers_csv() -> str:
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=_SUBS_HEADER)
+    writer.writeheader()
+    writer.writerows(load_subscribers())
+    return buf.getvalue()

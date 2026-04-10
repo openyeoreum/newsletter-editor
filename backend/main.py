@@ -315,6 +315,132 @@ def delete_unsubscribed(email: str):
     return {"ok": True}
 
 
+# ========== 수신동의(구독) ==========
+
+_SUBSCRIBE_PAGE_CSS = """
+  * { box-sizing: border-box; }
+  body { font-family: 'Apple SD Gothic Neo','Malgun Gothic',sans-serif; background:#f5f5f5; margin:0; padding:0; display:flex; align-items:center; justify-content:center; min-height:100vh; }
+  .card { background:#fff; border-radius:14px; box-shadow:0 12px 32px rgba(15,23,42,0.08); max-width:460px; width:100%; margin:20px; overflow:hidden; }
+  .card-top { background:#1a6b4a; padding:28px 36px; color:#fff; }
+  .card-top h1 { margin:0; font-size:20px; font-weight:800; letter-spacing:-0.3px; }
+  .card-top p { margin:6px 0 0; font-size:13px; opacity:0.85; }
+  .card-body { padding:32px 36px; }
+  label { display:block; font-size:13px; font-weight:600; color:#334155; margin-bottom:6px; }
+  label .req { color:#e53e3e; }
+  input[type=text], input[type=email] { width:100%; padding:10px 14px; border:1px solid #e2e8f0; border-radius:8px; font-size:14px; margin-bottom:16px; outline:none; transition:border .2s; }
+  input:focus { border-color:#1a6b4a; box-shadow:0 0 0 3px rgba(26,107,74,0.1); }
+  .consent { display:flex; gap:10px; align-items:flex-start; margin:18px 0 24px; padding:14px 16px; background:#f8faf9; border-radius:8px; border:1px solid #e8efe9; }
+  .consent input[type=checkbox] { margin-top:3px; accent-color:#1a6b4a; flex-shrink:0; }
+  .consent span { font-size:12px; color:#475569; line-height:1.65; }
+  .btn { width:100%; padding:13px; background:#1a6b4a; color:#fff; border:none; border-radius:8px; font-size:15px; font-weight:700; cursor:pointer; transition:background .2s; }
+  .btn:hover { background:#15573d; }
+  .footer { text-align:center; padding:0 36px 28px; font-size:11px; color:#94a3b8; line-height:1.6; }
+"""
+
+_SUBSCRIBE_SUCCESS_CSS = """
+  body { font-family: 'Apple SD Gothic Neo','Malgun Gothic',sans-serif; background:#f5f5f5; margin:0; padding:0; display:flex; align-items:center; justify-content:center; min-height:100vh; }
+  .card { background:#fff; border-radius:14px; box-shadow:0 12px 32px rgba(15,23,42,0.08); padding:48px 56px; max-width:440px; text-align:center; }
+  .icon { width:64px; height:64px; border-radius:50%; background:#ecf5f0; color:#1a6b4a; display:inline-flex; align-items:center; justify-content:center; font-size:32px; margin-bottom:18px; }
+  h1 { font-size:20px; color:#0f172a; margin:0 0 8px; letter-spacing:-0.3px; }
+  p { color:#475569; font-size:14px; line-height:1.7; margin:0 0 18px; }
+  .email { display:inline-block; background:#f7f8fa; border:1px solid #e8eaed; padding:6px 14px; border-radius:8px; font-size:13px; color:#1a6b4a; font-weight:600; }
+  .footer { margin-top:24px; font-size:12px; color:#94a3b8; }
+"""
+
+
+@app.get("/api/subscribe", response_class=HTMLResponse)
+def subscribe_form(email: str = "", name: str = ""):
+    """수신동의 폼 페이지"""
+    import html as _html
+    _email = _html.escape(email.strip())
+    _name = _html.escape(name.strip())
+    return HTMLResponse(f"""<!DOCTYPE html>
+<html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>전인교육학회 뉴스레터 수신동의</title>
+<style>{_SUBSCRIBE_PAGE_CSS}</style></head><body>
+  <div class="card">
+    <div class="card-top">
+      <h1>전인교육학회 뉴스레터</h1>
+      <p>학회지, 학술대회, 캠프 등 소식을 이메일로 받아보세요.</p>
+    </div>
+    <div class="card-body">
+      <form method="POST" action="/api/subscribe">
+        <label>이름 <span class="req">*</span></label>
+        <input type="text" name="name" required placeholder="홍길동" value="{_name}">
+        <label>이메일 <span class="req">*</span></label>
+        <input type="email" name="email" required placeholder="example@email.com" value="{_email}">
+        <label>소속</label>
+        <input type="text" name="organization" placeholder="대학교/기관명 (선택)">
+        <div class="consent">
+          <input type="checkbox" id="agree" name="agree" required>
+          <span>
+            <strong>개인정보 수집 및 이용 동의</strong><br>
+            전인교육학회는 뉴스레터 발송을 위해 이름, 이메일, 소속 정보를 수집합니다.
+            수집된 정보는 뉴스레터 발송 목적으로만 사용되며, 수신거부 시 즉시 파기합니다.
+          </span>
+        </div>
+        <button type="submit" class="btn">수신동의</button>
+      </form>
+    </div>
+    <div class="footer">전인교육학회 Academic Society for Human Completion</div>
+  </div>
+</body></html>""")
+
+
+@app.post("/api/subscribe", response_class=HTMLResponse)
+def subscribe_submit(
+    email: str = Form(...),
+    name: str = Form(""),
+    organization: str = Form(""),
+    agree: str = Form(""),
+):
+    """수신동의 폼 제출 처리"""
+    email = email.strip().lower()
+    if not email or "@" not in email:
+        raise HTTPException(400, "유효하지 않은 이메일입니다.")
+    added = storage.add_subscriber(email, name, organization)
+    if added:
+        msg_title = "수신동의가 완료되었습니다"
+        msg_body = "앞으로 전인교육학회 뉴스레터를<br>이메일로 받아보실 수 있습니다."
+    else:
+        msg_title = "이미 등록된 이메일입니다"
+        msg_body = "해당 이메일은 이미 수신동의 되어 있습니다.<br>추가 조치가 필요하지 않습니다."
+    return HTMLResponse(f"""<!DOCTYPE html>
+<html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>수신동의 완료</title>
+<style>{_SUBSCRIBE_SUCCESS_CSS}</style></head><body>
+  <div class="card">
+    <div class="icon">✓</div>
+    <h1>{msg_title}</h1>
+    <p>{msg_body}</p>
+    <div class="email">{email}</div>
+    <div class="footer">전인교육학회 Academic Society for Human Completion</div>
+  </div>
+</body></html>""")
+
+
+@app.get("/api/subscribers")
+def list_subscribers():
+    subs = storage.load_subscribers()
+    return {"subscribers": subs, "count": len(subs)}
+
+
+@app.delete("/api/subscribers/{email:path}")
+def delete_subscriber(email: str):
+    storage.remove_subscriber(email)
+    return {"ok": True}
+
+
+@app.get("/api/subscribers/export")
+def export_subscribers():
+    csv_str = storage.export_subscribers_csv()
+    return Response(
+        content=csv_str,
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="subscribers.csv"'},
+    )
+
+
 @app.get("/api/manual")
 def get_manual():
     import os

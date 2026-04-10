@@ -61,6 +61,8 @@ export default function App() {
   const [testEmail, setTestEmail] = useState('');
   const [unsubModal, setUnsubModal] = useState(false);
   const [unsubList, setUnsubList] = useState([]);
+  const [subModal, setSubModal] = useState(false);
+  const [subList, setSubList] = useState([]);
   const [sendJob, setSendJob] = useState(null); // 진행 중 작업 정보
   const sendPollRef = useRef();
   const [saveModal, setSaveModal] = useState(false);
@@ -96,6 +98,7 @@ export default function App() {
     api.templates().then(setTemplates).catch(() => {});
     api.senders().then(setSenders).catch(() => {});
     refreshUnsub();
+    refreshSubs();
     Promise.all([api.drafts(), api.defaultDraft()]).then(async ([list, defRes]) => {
       setDrafts(list);
       const defId = defRes?.id;
@@ -118,6 +121,7 @@ export default function App() {
 
   const refreshDrafts = () => api.drafts().then(setDrafts).catch(() => {});
   const refreshUnsub = () => api.unsubscribed().then(r => setUnsubList(r.emails || [])).catch(() => {});
+  const refreshSubs = () => api.subscribers().then(r => setSubList(r.subscribers || [])).catch(() => {});
 
   useEffect(() => {
     if (editingRef.current) return; // 미리보기 인라인 편집 중에는 재렌더 X
@@ -700,6 +704,35 @@ export default function App() {
               </div>
 
               <div className="section">
+                <div className="section-title">수신동의 명단 (캠프 홍보 등)</div>
+                <p className="muted" style={{ marginBottom: 8 }}>수신동의 페이지를 통해 등록된 명단입니다.</p>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                  <button className="secondary" style={{ flex: 1 }} onClick={() => { refreshSubs(); setSubModal(true); }}>
+                    <Icon name="mail" size={14}/> 구독자 목록 ({subList.length}명)
+                  </button>
+                  <button className="secondary" style={{ flex: 1 }} onClick={async () => {
+                    const r = await api.subscribers();
+                    const subs = r.subscribers || [];
+                    if (!subs.length) { alert('등록된 구독자가 없습니다.'); return; }
+                    setRecipients(subs.map(s => ({ email: s.email, name: s.name || null })));
+                  }}>
+                    <Icon name="download" size={14}/> 수신자로 불러오기
+                  </button>
+                </div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button className="secondary sm" onClick={async () => {
+                    const blob = await api.exportSubscribers();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a'); a.href = url; a.download = 'subscribers.csv'; a.click();
+                    URL.revokeObjectURL(url);
+                  }}>CSV 내보내기</button>
+                  <button className="secondary sm" onClick={() => {
+                    window.open(`${location.origin}/api/subscribe`, '_blank');
+                  }}><Icon name="eye" size={12}/> 수신동의 미리보기</button>
+                </div>
+              </div>
+
+              <div className="section">
                 <div className="section-title">수신거부 명단</div>
                 <p className="muted" style={{ marginBottom: 8 }}>수신거부한 이메일은 발송 시 자동으로 제외됩니다.</p>
                 <button className="secondary" style={{ width: '100%' }} onClick={() => { refreshUnsub(); setUnsubModal(true); }}>
@@ -808,6 +841,38 @@ export default function App() {
             </div>
             <div className="modal-footer">
               <button className="secondary" onClick={()=>setUnsubModal(false)}>닫기</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {subModal && (
+        <div className="modal-backdrop" onClick={()=>setSubModal(false)}>
+          <div className="modal" style={{ width: 560 }} onClick={e=>e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-icon"><Icon name="mail" size={20}/></div>
+              <div>
+                <div className="modal-title">구독자 목록</div>
+                <div className="modal-sub">총 {subList.length}명 · 수신동의 페이지를 통해 등록된 구독자</div>
+              </div>
+            </div>
+            <div className="modal-body" style={{ maxHeight: '50vh', overflowY: 'auto' }}>
+              {subList.length === 0 ? (
+                <div className="empty"><div className="icon"><Icon name="mail" size={36}/></div>등록된 구독자가 없습니다</div>
+              ) : (
+                subList.map(s => (
+                  <div className="draft-item" key={s.email}>
+                    <div className="draft-item-info">
+                      <div className="draft-item-name">{s.name || '(이름 없음)'} <span style={{ fontWeight: 400, color: 'var(--text-3)' }}>{s.organization && `· ${s.organization}`}</span></div>
+                      <div className="draft-item-meta" style={{ fontFamily: "'SF Mono', Menlo, monospace" }}>{s.email} · {s.subscribed_at}</div>
+                    </div>
+                    <button className="danger sm" onClick={async ()=>{ if(confirm(`${s.email} 구독자를 삭제하시겠습니까?`)){ await api.removeSubscriber(s.email); refreshSubs(); } }}>삭제</button>
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="modal-footer">
+              <button className="secondary" onClick={()=>setSubModal(false)}>닫기</button>
             </div>
           </div>
         </div>
