@@ -1,12 +1,12 @@
 {# ============================================================
-   공통 매크로 — 헤더, 푸터, 회장 인사말
+   공통 매크로 — 헤더, 푸터, 인사말
    3개 템플릿(classic/magazine/minimal)에서 import 하여 사용
    ============================================================ #}
 
-{% macro header(volume, issue_date, web_view_url, org_name='전인교육학회', org_subtitle='Academic Society for Human Completion') %}
+{% macro header(volume, issue_date, web_view_url, org_name='전인교육학회', org_subtitle='Academic Society for Human Completion', org_url='') %}
 <tr>
   <td style="padding:32px 40px 24px;" class="mobile-padding">
-    <a href="{{ web_view_url }}" style="font-size:20px; font-weight:800; color:#1a1a1a; letter-spacing:-0.3px; text-decoration:none;"><span data-field="org_name">{{ org_name|default('전인교육학회') }}</span></a>
+    <a href="{{ org_url or web_view_url }}" style="font-size:20px; font-weight:800; color:#1a1a1a; letter-spacing:-0.3px; text-decoration:none;"><span data-field="org_name">{{ org_name|default('전인교육학회') }}</span></a>
     <span style="font-size:11px; color:#999999; letter-spacing:0.3px; padding-left:8px;" data-field="org_subtitle">{{ org_subtitle|default('Academic Society for Human Completion') }}</span>
   </td>
 </tr>
@@ -16,15 +16,14 @@
   </td>
 </tr>
 <tr>
-  <td style="padding:20px 40px 28px;" class="mobile-padding">
-    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
-      <tr>
-        <td style="color:#888888; font-size:13px; line-height:1.5;">Vol. {{ volume }} &middot; {{ issue_date }}</td>
-        <td align="right" style="color:#888888; font-size:13px;">
-          <a href="{{ web_view_url }}" style="color:#1a6b4a; text-decoration:none; font-weight:600;">웹에서 보기</a>
-        </td>
-      </tr>
-    </table>
+  <td style="padding:20px 40px 0;" class="mobile-padding">
+    <a href="{{ web_view_url }}" style="color:#1a6b4a; text-decoration:none; font-weight:600; font-size:11.5px;">학회의 더 자세한 소식을 받아보세요 →</a>
+    <div style="color:#999999; font-size:10px; margin-top:2px;">학회지, 학술대회, 캠프 등 정보 수신 동의</div>
+  </td>
+</tr>
+<tr>
+  <td style="padding:5px 40px 28px;" class="mobile-padding">
+    <div style="color:#888888; font-size:13px; line-height:1.5; text-align:right;">Vol. {{ volume }} &middot; {{ issue_date }}</div>
   </td>
 </tr>
 {% endmacro %}
@@ -41,10 +40,14 @@
               <td style="padding-bottom:20px;">
                 <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                   <tr>
+                    {% if greeting.showPhoto is not defined or greeting.showPhoto %}
                     <td style="vertical-align:middle;">
                       <img src="{{ greeting.photo }}" alt="{{ greeting.name }}" data-img="greeting" width="80" height="80" style="width:80px; height:80px; display:block; border:2px solid #e0ede5; border-radius:50%;">
                     </td>
                     <td style="vertical-align:middle; padding-left:14px;">
+                    {% else %}
+                    <td style="vertical-align:middle;">
+                    {% endif %}
                       <span style="color:#1a1a1a; font-size:15px; font-weight:700; display:block; line-height:1.3;" data-field="greeting.name">{{ greeting.name }}</span>
                       <span style="color:#888888; font-size:12px; display:block; line-height:1.4; margin-top:2px;" data-field="greeting.title">{{ greeting.title }}</span>
                     </td>
@@ -87,17 +90,21 @@
         <td style="padding:36px 32px;">
           <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
             <tr>
+              {% if greeting.showPhoto is not defined or greeting.showPhoto %}
               <td width="90" style="vertical-align:top;">
                 <img src="{{ greeting.photo }}" alt="{{ greeting.name }}" data-img="greeting" width="80" height="80" style="width:80px; height:80px; display:block; border:3px solid #ffffff; border-radius:50%;">
               </td>
               <td style="vertical-align:top; padding-left:20px; color:#ffffff;">
-                <div style="font-size:13px; opacity:0.85; letter-spacing:1px;">PRESIDENT'S MESSAGE</div>
+              {% else %}
+              <td style="vertical-align:top; color:#ffffff;">
+              {% endif %}
+                <div style="font-size:13px; opacity:0.85; letter-spacing:1px;">GREETING</div>
                 <div style="font-size:18px; font-weight:800; padding-top:4px;" data-field="greeting.name">{{ greeting.name }}</div>
                 <div style="font-weight:400; font-size:13px; opacity:0.85; padding-top:2px;" data-field="greeting.title">{{ greeting.title }}</div>
               </td>
             </tr>
             <tr>
-              <td colspan="2" style="padding-top:18px; color:#ffffff;">
+              <td colspan="{{ 2 if (greeting.showPhoto is not defined or greeting.showPhoto) else 1 }}" style="padding-top:18px; color:#ffffff;">
                 <div style="font-size:16px; font-weight:500; line-height:1.85;">
                   {% set _parts = greeting.body.split('<!--more-->') %}
                   <div data-field-html="greeting.body_main">{{ _parts[0] | replace('\n','<br>') | safe }}</div>
@@ -121,10 +128,10 @@
 
 
 {% macro greeting_minimal(greeting) %}
-{# Minimal 템플릿용: 사진 없이 텍스트 중심 #}
+{# Minimal 템플릿용: 텍스트 중심 #}
 <tr>
   <td style="padding:0 40px 36px;" class="mobile-padding">
-    <div style="font-size:11px; color:#999; letter-spacing:2px; padding-bottom:10px;">FROM THE PRESIDENT</div>
+    <div style="font-size:11px; color:#999; letter-spacing:2px; padding-bottom:10px;">GREETING</div>
     <div style="color:#1a1a1a; font-size:16px; font-weight:500; line-height:1.9;">
       {% set _parts = greeting.body.split('<!--more-->') %}
       <div data-field-html="greeting.body_main">{{ _parts[0] | replace('\n','<br>') | safe }}</div>

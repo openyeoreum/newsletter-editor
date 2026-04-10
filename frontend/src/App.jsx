@@ -9,6 +9,7 @@ const MORE = '<!--more-->';
 const DEFAULT_DATA = {
   org_name: '전인교육학회',
   org_subtitle: 'Academic Society for Human Completion',
+  org_url: 'https://humancompletion.org/',
   volume: '24',
   issue_date: '2026년 4월',
   web_view_url: 'https://humancompletion.org/',
@@ -49,6 +50,7 @@ export default function App() {
   const [data, setData] = useState(DEFAULT_DATA);
   const [html, setHtml] = useState('');
   const [draftId, setDraftId] = useState(null);
+  const [defaultDraftId, setDefaultDraftId] = useState(null);
   const [tab, setTab] = useState('edit');
 
   const [sender, setSender] = useState('mailhog');
@@ -90,24 +92,26 @@ export default function App() {
     localStorage.setItem('theme', theme);
   }, [theme]);
 
-  const DEFAULT_DRAFT_NAME = '260408 뉴스레터 (Vol.01)';
   useEffect(() => {
     api.templates().then(setTemplates).catch(() => {});
     api.senders().then(setSenders).catch(() => {});
     refreshUnsub();
-    api.drafts().then(async list => {
+    Promise.all([api.drafts(), api.defaultDraft()]).then(async ([list, defRes]) => {
       setDrafts(list);
-      const def = list.find(d => d.name === DEFAULT_DRAFT_NAME);
-      if (def) {
-        const d = await api.draft(def.id);
-        if (d.data?.articles) {
-          d.data.articles = d.data.articles.map((a, i) => ({ ...a, layout: a.layout || DEFAULT_LAYOUTS[i] || 'image_left' }));
+      const defId = defRes?.id;
+      if (defId) setDefaultDraftId(defId);
+      const target = defId && list.find(d => d.id === defId);
+      if (target) {
+        const d = await api.draft(target.id);
+        const merged = { ...DEFAULT_DATA, ...d.data, greeting: { ...DEFAULT_DATA.greeting, ...d.data?.greeting } };
+        if (merged.articles) {
+          merged.articles = merged.articles.map((a, i) => ({ ...a, layout: a.layout || DEFAULT_LAYOUTS[i] || 'image_left' }));
         }
         setDraftId(d.id);
         setName(d.name);
         setTemplate(d.template);
         setSubject(d.subject);
-        setData(d.data);
+        setData(merged);
       }
     }).catch(() => {});
   }, []);
@@ -280,10 +284,11 @@ export default function App() {
 
   const onLoadDraft = async (id) => {
     const d = await api.draft(id);
-    if (d.data?.articles) {
-      d.data.articles = d.data.articles.map((a, i) => ({ ...a, layout: a.layout || DEFAULT_LAYOUTS[i] || 'image_left' }));
+    const merged = { ...DEFAULT_DATA, ...d.data, greeting: { ...DEFAULT_DATA.greeting, ...d.data?.greeting } };
+    if (merged.articles) {
+      merged.articles = merged.articles.map((a, i) => ({ ...a, layout: a.layout || DEFAULT_LAYOUTS[i] || 'image_left' }));
     }
-    setDraftId(d.id); setName(d.name); setTemplate(d.template); setSubject(d.subject); setData(d.data);
+    setDraftId(d.id); setName(d.name); setTemplate(d.template); setSubject(d.subject); setData(merged);
     setTab('edit');
   };
 
@@ -372,6 +377,8 @@ export default function App() {
       grip: <><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/></>,
       copy: <><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></>,
       book: <><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></>,
+      star: <><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></>,
+      starFilled: <><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" style={{fill:'currentColor'}}/></>,
     };
     return <svg viewBox="0 0 24 24" style={s}>{paths[name]}</svg>;
   };
@@ -447,7 +454,7 @@ export default function App() {
         <div className="panel-header">
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
             <div>
-              {tab === 'edit' && (<><h2>뉴스레터 편집</h2><p>회장 인사말 + 5개 아티클을 작성하세요. 미리보기 텍스트는 직접 클릭해 수정할 수도 있습니다.</p></>)}
+              {tab === 'edit' && (<><h2>뉴스레터 편집</h2><p>인사말 + 5개 아티클을 작성하세요. 미리보기 텍스트는 직접 클릭해 수정할 수도 있습니다.</p></>)}
               {tab === 'drafts' && (<><h2>저장된 초안</h2><p>이전에 작성한 뉴스레터를 불러오거나 삭제할 수 있습니다.</p></>)}
               {tab === 'send' && (<><h2>발송 설정</h2><p>발송 방식과 수신자를 선택한 뒤 테스트 또는 전체 발송하세요.</p></>)}
               {tab === 'manual' && (<><h2>사용 매뉴얼</h2><p>기능별 사용법과 자주 묻는 질문을 확인하세요.</p></>)}
@@ -477,16 +484,23 @@ export default function App() {
                   <div><label>호수 (Vol.)</label><input value={data.volume} onChange={e=>setData(d=>({...d,volume:e.target.value}))} /></div>
                   <div><label>발행일</label><input value={data.issue_date} onChange={e=>setData(d=>({...d,issue_date:e.target.value}))} /></div>
                 </div>
-                <label>웹에서 보기 URL</label>
+                <label>홈페이지 URL</label>
+                <input value={data.org_url || ''} onChange={e=>setData(d=>({...d,org_url:e.target.value}))} placeholder="https://..." />
+                <label>수신동의 URL</label>
                 <input value={data.web_view_url} onChange={e=>setData(d=>({...d,web_view_url:e.target.value}))} />
               </div>
 
               <div className="section">
-                <div className="section-title">회장 인사말</div>
-                <label>프로필 사진</label>
-                <input value={data.greeting.photo} onChange={e=>updateGreeting('photo', e.target.value)} placeholder="https://..." />
-                <Dropzone onFile={file=>onUploadImage(file, url=>updateGreeting('photo', url))} hint="권장 160×160 (정사각)" />
-                {data.greeting.photo && <img src={data.greeting.photo} className="thumb" alt="" />}
+                <div className="section-title">인사말</div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={data.greeting.showPhoto !== false} onChange={e=>updateGreeting('showPhoto', e.target.checked)} style={{ accentColor: '#1a6b4a' }} />
+                  프로필 사진 사용
+                </label>
+                {data.greeting.showPhoto !== false && (<>
+                  <input value={data.greeting.photo} onChange={e=>updateGreeting('photo', e.target.value)} placeholder="https://..." />
+                  <Dropzone onFile={file=>onUploadImage(file, url=>updateGreeting('photo', url))} hint="권장 160×160 (정사각)" />
+                  {data.greeting.photo && <img src={data.greeting.photo} className="thumb" alt="" />}
+                </>)}
                 <div className="row">
                   <div><label>이름</label><input value={data.greeting.name} onChange={e=>updateGreeting('name', e.target.value)} /></div>
                   <div><label>직함</label><input value={data.greeting.title} onChange={e=>updateGreeting('title', e.target.value)} /></div>
@@ -566,50 +580,80 @@ export default function App() {
           )}
 
           {tab === 'drafts' && (
-            <div className="section">
-              {drafts.length === 0 && (
-                <div className="empty">
-                  <div className="icon"><Icon name="drafts" size={36}/></div>
-                  저장된 초안이 없습니다
-                </div>
-              )}
-              {drafts.map(d => (
-                <div className="draft-item" key={d.id}>
-                  <div className="draft-item-info">
-                    {editingDraftId === d.id ? (
-                      <input
-                        autoFocus
-                        className="draft-name-input"
-                        value={editingDraftName}
-                        onChange={e=>setEditingDraftName(e.target.value)}
-                        onBlur={async ()=>{
-                          await api.renameDraft(d.id, editingDraftName);
-                          if (draftId === d.id) setName(editingDraftName);
-                          setEditingDraftId(null);
-                          refreshDrafts();
-                        }}
-                        onKeyDown={async e=>{
-                          if (e.key === 'Enter') {
+            <>
+              <div className="section">
+                <div className="section-title">대표 초안</div>
+                {defaultDraftId && drafts.find(d => d.id === defaultDraftId) ? (
+                  <div className="draft-item" style={{ borderColor: 'var(--brand)', background: 'var(--brand-bg, #ecf5f0)' }}>
+                    <div className="draft-item-info">
+                      <div className="draft-item-name" style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Icon name="starFilled" size={14}/> {drafts.find(d => d.id === defaultDraftId).name}</div>
+                      <div className="draft-item-meta">새로고침 시 자동으로 불러옵니다</div>
+                    </div>
+                    <div className="draft-item-actions">
+                      <button className="secondary sm" onClick={()=>onLoadDraft(defaultDraftId)}>불러오기</button>
+                      <button className="secondary sm" onClick={async ()=>{ await api.setDefaultDraft(null); setDefaultDraftId(null); }}>해제</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="muted" style={{ fontSize: 12, padding: '8px 0', display: 'flex', alignItems: 'center', gap: 6 }}><Icon name="star" size={13}/> 아래 목록에서 별 버튼을 눌러 대표 초안을 지정하세요.</div>
+                )}
+              </div>
+              <div className="section">
+                <div className="section-title">저장된 초안</div>
+                {drafts.length === 0 && (
+                  <div className="empty">
+                    <div className="icon"><Icon name="drafts" size={36}/></div>
+                    저장된 초안이 없습니다
+                  </div>
+                )}
+                {drafts.map(d => (
+                  <div className="draft-item" key={d.id}>
+                    <button
+                      className="icon-only sm"
+                      title={d.id === defaultDraftId ? '대표 초안 해제' : '대표 초안으로 지정'}
+                      style={{ marginRight: 8, color: d.id === defaultDraftId ? 'var(--brand)' : 'var(--text-3)' }}
+                      onClick={async ()=>{
+                        const newId = d.id === defaultDraftId ? null : d.id;
+                        await api.setDefaultDraft(newId);
+                        setDefaultDraftId(newId);
+                      }}
+                    ><Icon name={d.id === defaultDraftId ? 'starFilled' : 'star'} size={15}/></button>
+                    <div className="draft-item-info">
+                      {editingDraftId === d.id ? (
+                        <input
+                          autoFocus
+                          className="draft-name-input"
+                          value={editingDraftName}
+                          onChange={e=>setEditingDraftName(e.target.value)}
+                          onBlur={async ()=>{
                             await api.renameDraft(d.id, editingDraftName);
                             if (draftId === d.id) setName(editingDraftName);
                             setEditingDraftId(null);
                             refreshDrafts();
-                          }
-                          if (e.key === 'Escape') setEditingDraftId(null);
-                        }}
-                      />
-                    ) : (
-                      <div className="draft-item-name" onDoubleClick={()=>{ setEditingDraftId(d.id); setEditingDraftName(d.name); }} title="더블클릭하여 이름 변경">{d.name}</div>
-                    )}
-                    <div className="draft-item-meta">{d.id} · {d.template}</div>
+                          }}
+                          onKeyDown={async e=>{
+                            if (e.key === 'Enter') {
+                              await api.renameDraft(d.id, editingDraftName);
+                              if (draftId === d.id) setName(editingDraftName);
+                              setEditingDraftId(null);
+                              refreshDrafts();
+                            }
+                            if (e.key === 'Escape') setEditingDraftId(null);
+                          }}
+                        />
+                      ) : (
+                        <div className="draft-item-name" onDoubleClick={()=>{ setEditingDraftId(d.id); setEditingDraftName(d.name); }} title="더블클릭하여 이름 변경">{d.name}</div>
+                      )}
+                      <div className="draft-item-meta">{d.id} · {d.template}</div>
+                    </div>
+                    <div className="draft-item-actions">
+                      <button className="secondary sm" onClick={()=>onLoadDraft(d.id)}>불러오기</button>
+                      <button className="danger sm" onClick={async ()=>{ if(confirm('삭제하시겠습니까?')){ await api.deleteDraft(d.id); if(d.id === defaultDraftId){ await api.setDefaultDraft(null); setDefaultDraftId(null); } refreshDrafts(); }}}>삭제</button>
+                    </div>
                   </div>
-                  <div className="draft-item-actions">
-                    <button className="secondary sm" onClick={()=>onLoadDraft(d.id)}>불러오기</button>
-                    <button className="danger sm" onClick={async ()=>{ if(confirm('삭제하시겠습니까?')){ await api.deleteDraft(d.id); refreshDrafts(); }}}>삭제</button>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            </>
           )}
 
           {tab === 'send' && (

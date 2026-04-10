@@ -72,6 +72,30 @@ def delete_draft(draft_id: str) -> bool:
     return False
 
 
+# ========== 대표 초안 ==========
+
+_DEFAULT_DRAFT_FILE = DRAFTS / ".default"
+
+
+def get_default_draft_id() -> str | None:
+    if _DEFAULT_DRAFT_FILE.exists():
+        draft_id = _DEFAULT_DRAFT_FILE.read_text(encoding="utf-8").strip()
+        if draft_id and (DRAFTS / f"{draft_id}.json").exists():
+            return draft_id
+    return None
+
+
+def set_default_draft_id(draft_id: str | None) -> bool:
+    if draft_id is None:
+        if _DEFAULT_DRAFT_FILE.exists():
+            _DEFAULT_DRAFT_FILE.unlink()
+        return True
+    if not (DRAFTS / f"{draft_id}.json").exists():
+        return False
+    _DEFAULT_DRAFT_FILE.write_text(draft_id, encoding="utf-8")
+    return True
+
+
 # ========== 수신거부 관리 ==========
 
 UNSUB = Path(config.UNSUBSCRIBED_FILE)

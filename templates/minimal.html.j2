@@ -5,7 +5,7 @@
   <tr><td align="center" style="padding:30px 10px;">
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="620" class="mobile-full" style="max-width:620px; width:100%; background-color:#ffffff;">
 
-      {{ m.header(volume, issue_date, web_view_url, org_name, org_subtitle) }}
+      {{ m.header(volume, issue_date, web_view_url, org_name, org_subtitle, org_url) }}
       {{ m.greeting_minimal(greeting) }}
 
       <tr><td style="padding:0 40px 20px;" class="mobile-padding">
@@ -20,7 +20,7 @@
       <tr><td style="padding:0 40px 24px;" class="mobile-padding">
         <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"><tr>
           <td width="{{ _w }}" class="mobile-stack" style="vertical-align:top;">
-            <img src="{{ a.image }}" data-img="article-{{ loop.index0 }}" alt="{{ a.title }}" width="{{ _w }}" style="width:{{ _w }}px; height:{{ _h }}px; display:block; object-fit:cover; border-radius:10px;" class="{% if loop.last %}mobile-img-tall{% else %}mobile-img{% endif %}">
+            <a href="{{ a.link }}" style="text-decoration:none;"><img src="{{ a.image }}" data-img="article-{{ loop.index0 }}" alt="{{ a.title }}" width="{{ _w }}" style="width:{{ _w }}px; height:{{ _h }}px; display:block; object-fit:cover; border-radius:10px;" class="{% if loop.last %}mobile-img-tall{% else %}mobile-img{% endif %}"></a>
           </td>
           <td width="20" class="mobile-hide">&nbsp;</td>
           <td class="mobile-stack" style="vertical-align:top;">

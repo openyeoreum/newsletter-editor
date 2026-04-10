@@ -5,7 +5,7 @@
   <tr><td align="center" style="padding:16px 10px;">
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="620" class="mobile-full" style="max-width:620px; width:100%; background-color:#ffffff;">
 
-      {{ m.header(volume, issue_date, web_view_url, org_name, org_subtitle) }}
+      {{ m.header(volume, issue_date, web_view_url, org_name, org_subtitle, org_url) }}
       {{ m.greeting_block(greeting) }}
 
       <tr><td style="padding:0 40px 28px;" class="mobile-padding"><div style="border-top:1px solid #eeeeee;">&nbsp;</div></td></tr>
@@ -15,7 +15,7 @@
 
         {% if layout == 'hero' %}
         <tr><td style="padding:0 40px;" class="mobile-padding">
-          <img src="{{ a.image }}" data-img="article-{{ loop.index0 }}" alt="{{ a.title }}" width="540" style="width:100%; height:auto; display:block; border-radius:10px;" class="mobile-img">
+          <a href="{{ a.link }}" style="text-decoration:none;"><img src="{{ a.image }}" data-img="article-{{ loop.index0 }}" alt="{{ a.title }}" width="540" style="width:100%; height:auto; display:block; border-radius:10px;" class="mobile-img"></a>
           <div style="padding:20px 0 8px;">{{ m.badge(a.badge_text, '#1a6b4a', '#e8f0ec', 'articles.' ~ loop.index0 ~ '.badge_text') }}</div>
           <div style="padding:4px 0; color:#1a1a1a; font-size:24px; font-weight:800; line-height:1.35; letter-spacing:-0.5px;"><a href="{{ a.link }}" style="color:inherit; text-decoration:none;"><span data-field="articles.{{ loop.index0 }}.title">{{ a.title }}</span></a></div>
           <div style="padding:8px 0 0; color:#666; font-size:15px; line-height:1.7;"><span data-field="articles.{{ loop.index0 }}.summary">{{ a.summary | replace('
@@ -30,7 +30,7 @@
         <tr><td style="padding:0 40px;" class="mobile-padding">
           <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"><tr>
             <td width="180" class="mobile-stack" style="vertical-align:top;">
-              <img src="{{ a.image }}" data-img="article-{{ loop.index0 }}" alt="{{ a.title }}" width="180" style="width:180px; height:130px; display:block; border-radius:10px;" class="mobile-img">
+              <a href="{{ a.link }}" style="text-decoration:none;"><img src="{{ a.image }}" data-img="article-{{ loop.index0 }}" alt="{{ a.title }}" width="180" style="width:180px; height:130px; display:block; border-radius:10px;" class="mobile-img"></a>
             </td>
             <td width="20" class="mobile-hide">&nbsp;</td>
             <td class="mobile-stack" style="vertical-align:top;">
@@ -59,7 +59,7 @@
             </td>
             <td width="20" class="mobile-hide">&nbsp;</td>
             <td width="180" class="mobile-stack" style="vertical-align:top;">
-              <img src="{{ a.image }}" data-img="article-{{ loop.index0 }}" alt="{{ a.title }}" width="180" style="width:180px; height:130px; display:block; border-radius:10px;" class="mobile-img">
+              <a href="{{ a.link }}" style="text-decoration:none;"><img src="{{ a.image }}" data-img="article-{{ loop.index0 }}" alt="{{ a.title }}" width="180" style="width:180px; height:130px; display:block; border-radius:10px;" class="mobile-img"></a>
             </td>
           </tr></table>
         </td></tr>
@@ -67,7 +67,7 @@
         {% elif layout == 'card_banner' %}
         <tr><td style="padding:0 40px;" class="mobile-padding">
           <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-radius:10px; overflow:hidden; border:1px solid #eee;">
-            <tr><td><img src="{{ a.image }}" data-img="article-{{ loop.index0 }}" alt="{{ a.title }}" width="540" style="width:100%; height:auto; display:block; border-radius:10px;" class="mobile-img"></td></tr>
+            <tr><td><a href="{{ a.link }}" style="text-decoration:none;"><img src="{{ a.image }}" data-img="article-{{ loop.index0 }}" alt="{{ a.title }}" width="540" style="width:100%; height:auto; display:block; border-radius:10px;" class="mobile-img"></a></td></tr>
             <tr><td style="padding:22px 24px 24px;">
               {{ m.badge(a.badge_text, '#b8860b', '#fdf6ec', 'articles.' ~ loop.index0 ~ '.badge_text') }}
               <div style="padding-top:10px; color:#1a1a1a; font-size:18px; font-weight:700; line-height:1.4;"><a href="{{ a.link }}" style="color:inherit; text-decoration:none;"><span data-field="articles.{{ loop.index0 }}.title">{{ a.title }}</span></a></div>
@@ -84,7 +84,7 @@
         <tr><td style="padding:0 40px;" class="mobile-padding">
           <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"><tr>
             <td width="140" class="mobile-stack" style="vertical-align:top;">
-              <img src="{{ a.image }}" data-img="article-{{ loop.index0 }}" alt="{{ a.title }}" width="140" style="width:140px; height:190px; display:block; border-radius:10px;" class="mobile-img-tall">
+              <a href="{{ a.link }}" style="text-decoration:none;"><img src="{{ a.image }}" data-img="article-{{ loop.index0 }}" alt="{{ a.title }}" width="140" style="width:140px; height:190px; display:block; border-radius:10px;" class="mobile-img-tall"></a>
             </td>
             <td width="20" class="mobile-hide">&nbsp;</td>
             <td class="mobile-stack" style="vertical-align:top;">

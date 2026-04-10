@@ -115,6 +115,23 @@ def rename_draft(draft_id: str, body: RenameIn):
     return d
 
 
+@app.get("/api/default-draft")
+def get_default_draft():
+    return {"id": storage.get_default_draft_id()}
+
+
+class DefaultDraftIn(BaseModel):
+    id: str | None = None
+
+
+@app.put("/api/default-draft")
+def put_default_draft(body: DefaultDraftIn):
+    ok = storage.set_default_draft_id(body.id)
+    if not ok:
+        raise HTTPException(404, "Draft not found")
+    return {"ok": True, "id": body.id}
+
+
 @app.post("/api/upload-image")
 async def upload_image(file: UploadFile = File(...)):
     if not config.CLOUDINARY_CLOUD_NAME:

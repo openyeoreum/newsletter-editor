@@ -8,6 +8,8 @@ export const api = {
   saveDraft: (d) => fetch('/api/drafts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(d) }).then(J),
   deleteDraft: (id) => fetch(`/api/drafts/${id}`, { method: 'DELETE' }).then(J),
   renameDraft: (id, name) => fetch(`/api/drafts/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) }).then(J),
+  defaultDraft: () => fetch('/api/default-draft').then(J),
+  setDefaultDraft: (id) => fetch('/api/default-draft', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }).then(J),
   render: (template, data) => fetch('/api/render', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ template, data }),
