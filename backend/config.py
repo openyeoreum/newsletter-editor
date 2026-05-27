@@ -3,6 +3,16 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+APP_ENV = os.getenv("APP_ENV", "development").lower()
+FRONTEND_DIST_DIR = os.getenv("FRONTEND_DIST_DIR", "/app/frontend/dist")
+
+ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
+
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
+USE_SUPABASE = bool(SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY)
+
 # Gmail SMTP
 GMAIL_USER = os.getenv("GMAIL_USER", "")
 GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD", "")
@@ -28,3 +38,4 @@ RECIPIENTS_DIR = os.getenv("RECIPIENTS_DIR", "/data/recipients")
 UNSUBSCRIBED_FILE = os.getenv("UNSUBSCRIBED_FILE", "/data/recipients/unsubscribed.csv")
 SUBSCRIBERS_FILE = os.getenv("SUBSCRIBERS_FILE", "/data/recipients/subscribers.csv")
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "http://localhost:8000")
+SEND_BATCH_SIZE = int(os.getenv("SEND_BATCH_SIZE", "100"))

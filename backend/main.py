@@ -1,13 +1,15 @@
 import csv
+import base64
 import io
-from fastapi import FastAPI, UploadFile, File, HTTPException, Form
+import secrets
+from pathlib import Path
+from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, Response
 from pydantic import BaseModel
 import cloudinary
 import cloudinary.uploader
 
-import threading
 from . import config, storage, renderer, senders, jobs
 from .senders.base import Recipient
 
@@ -19,6 +21,41 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+PUBLIC_PATHS = {"/api/subscribe", "/api/unsubscribe", "/health"}
+
+
+def _is_public_path(path: str) -> bool:
+    normalized = path.rstrip("/") or "/"
+    return normalized in PUBLIC_PATHS
+
+
+def _authorized(auth_header: str | None) -> bool:
+    if not config.ADMIN_PASSWORD:
+        return True
+    if not auth_header or not auth_header.startswith("Basic "):
+        return False
+    try:
+        raw = base64.b64decode(auth_header.removeprefix("Basic ").strip()).decode("utf-8")
+        username, password = raw.split(":", 1)
+    except Exception:
+        return False
+    return (
+        secrets.compare_digest(username, config.ADMIN_USERNAME)
+        and secrets.compare_digest(password, config.ADMIN_PASSWORD)
+    )
+
+
+@app.middleware("http")
+async def require_admin_auth(request: Request, call_next):
+    if config.ADMIN_PASSWORD and not _is_public_path(request.url.path):
+        if not _authorized(request.headers.get("authorization")):
+            return PlainTextResponse(
+                "Authentication required",
+                status_code=401,
+                headers={"WWW-Authenticate": 'Basic realm="Newsletter Admin"'},
+            )
+    return await call_next(request)
 
 if config.CLOUDINARY_CLOUD_NAME:
     cloudinary.config(
@@ -59,7 +96,7 @@ def get_templates():
 
 @app.get("/api/senders")
 def get_senders():
-    return senders.AVAILABLE
+    return senders.get_available()
 
 
 @app.post("/api/render", response_class=HTMLResponse)
@@ -210,48 +247,89 @@ async def parse_recipients(file: UploadFile = File(...)):
     return {"recipients": out, "count": len(out)}
 
 
-def _run_send_job(job_id: str, req: SendRequest, html: str, rcpts: list[Recipient], skipped: int):
-    jobs.update(job_id, status="running", skipped=skipped)
-    try:
-        sender = senders.get_sender(req.sender)
+def _filter_send_recipients(recipients: list[dict]) -> tuple[list[Recipient], int]:
+    unsub = storage.load_unsubscribed()
+    seen: set[str] = set()
+    out: list[Recipient] = []
+    skipped = 0
+    for raw in recipients:
+        email = (raw.get("email") or "").strip().lower()
+        if not email or "@" not in email:
+            continue
+        if email in seen:
+            continue
+        seen.add(email)
+        if email in unsub:
+            skipped += 1
+            continue
+        out.append(Recipient(email=email, name=raw.get("name")))
+    return out, skipped
 
-        def on_progress(**kwargs):
-            jobs.update(job_id, **kwargs)
 
-        res = sender.send(html, req.subject, rcpts, req.from_addr, req.from_name, on_progress=on_progress)
-        for err in res.errors[:50]:
-            jobs.update(job_id, errors_append=err)
-        jobs.update(
-            job_id,
-            sent=res.sent,
-            failed=res.failed,
-            status="done",
-            finished_at=__import__("time").time(),
-            message=f"발송 완료 — {res.sent}건 성공 / {res.failed}건 실패 / {skipped}건 수신거부 제외",
-        )
-    except Exception as e:
-        jobs.update(job_id, status="failed", errors_append=str(e), finished_at=__import__("time").time(),
-                    message=f"발송 실패: {e}")
+def _split_batch_result(batch: list[dict], errors: list[str], failed_count: int) -> tuple[list[str], list[dict]]:
+    by_email = {row["email"].strip().lower(): row for row in batch}
+    failed_by_id: dict[str, dict] = {}
+    for err in errors:
+        prefix = err.split(":", 1)[0].strip().lower() if ":" in err else ""
+        row = by_email.get(prefix)
+        if row:
+            failed_by_id[row["id"]] = {**row, "error": err}
+
+    if failed_count and not failed_by_id:
+        message = errors[0] if errors else "발송 실패"
+        for row in batch[:failed_count]:
+            failed_by_id[row["id"]] = {**row, "error": message}
+    elif len(failed_by_id) < failed_count:
+        message = errors[0] if errors else "발송 실패"
+        remaining = [row for row in batch if row["id"] not in failed_by_id]
+        for row in remaining[: failed_count - len(failed_by_id)]:
+            failed_by_id[row["id"]] = {**row, "error": message}
+
+    failed_ids = set(failed_by_id)
+    sent_ids = [row["id"] for row in batch if row["id"] not in failed_ids]
+    return sent_ids, list(failed_by_id.values())
 
 
 @app.post("/api/send")
 def post_send(req: SendRequest):
-    html = renderer.render(req.template, req.data)
-
-    # 수신거부 필터링
-    unsub = storage.load_unsubscribed()
-    filtered = [r for r in req.recipients if r["email"].strip().lower() not in unsub]
-    skipped = len(req.recipients) - len(filtered)
-    rcpts = [Recipient(email=r["email"], name=r.get("name")) for r in filtered]
+    renderer.render(req.template, req.data)
+    rcpts, skipped = _filter_send_recipients(req.recipients)
 
     if not rcpts:
         return {"job_id": None, "sent": 0, "failed": 0, "skipped": skipped, "message": "발송할 수신자가 없습니다 (모두 수신거부됨)"}
 
-    # 작업 등록 + 백그라운드 스레드 시작
-    job = jobs.create_job(total=len(rcpts))
-    t = threading.Thread(target=_run_send_job, args=(job.id, req, html, rcpts, skipped), daemon=True)
-    t.start()
-    return {"job_id": job.id, "total": len(rcpts), "skipped": skipped}
+    job = jobs.create_job(req.model_dump(), rcpts, skipped=skipped, batch_size=config.SEND_BATCH_SIZE)
+    return {"job_id": job["id"], "total": job["total"], "skipped": job["skipped"]}
+
+
+@app.post("/api/send/{job_id}/process")
+def process_send_job(job_id: str):
+    job = jobs.get_job(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    if job["status"] in {"done", "failed"}:
+        return job
+
+    batch = jobs.get_pending_recipients(job_id, config.SEND_BATCH_SIZE)
+    if not batch:
+        done = jobs.finish_if_complete(job_id)
+        if not done:
+            raise HTTPException(404, "Job not found")
+        return done
+
+    jobs.set_running(job_id)
+    try:
+        html = renderer.render(job["template"], job["data"])
+        sender = senders.get_sender(job["sender"])
+        recipients = [Recipient(email=row["email"], name=row.get("name")) for row in batch]
+        result = sender.send(html, job["subject"], recipients, job["from_addr"], job["from_name"])
+        sent_ids, failed_rows = _split_batch_result(batch, result.errors, result.failed)
+        return jobs.mark_batch_result(job_id, sent_ids, failed_rows)
+    except Exception as e:
+        failed = jobs.fail_job(job_id, f"발송 실패: {e}", [str(e)])
+        if not failed:
+            raise HTTPException(404, "Job not found")
+        return failed
 
 
 @app.get("/api/send/{job_id}")
@@ -259,7 +337,7 @@ def get_send_status(job_id: str):
     job = jobs.get_job(job_id)
     if not job:
         raise HTTPException(404, "Job not found")
-    return job.to_dict()
+    return job
 
 
 @app.get("/api/jobs")
@@ -275,24 +353,53 @@ class UnsubIn(BaseModel):
 
 @app.get("/api/unsubscribe", response_class=HTMLResponse)
 def unsubscribe_landing(email: str):
-    """이메일에서 수신거부 링크 클릭 시 진입하는 페이지"""
-    storage.add_unsubscribed(email)
+    """이메일에서 수신거부 링크 클릭 시 진입하는 확인 페이지"""
+    import html as _html
+    _email = _html.escape(email.strip())
     return HTMLResponse(f"""<!DOCTYPE html>
-<html lang="ko"><head><meta charset="UTF-8"><title>수신거부 완료</title>
-<style>
-  body {{ font-family: 'Apple SD Gothic Neo','Malgun Gothic',sans-serif; background:#f7f8fa; margin:0; padding:0; display:flex; align-items:center; justify-content:center; min-height:100vh; }}
-  .card {{ background:#fff; border-radius:14px; box-shadow:0 12px 32px rgba(15,23,42,0.08); padding:48px 56px; max-width:440px; text-align:center; }}
-  .icon {{ width:64px; height:64px; border-radius:50%; background:#ecf5f0; color:#1a6b4a; display:inline-flex; align-items:center; justify-content:center; font-size:32px; margin-bottom:18px; }}
-  h1 {{ font-size:20px; color:#0f172a; margin:0 0 8px; letter-spacing:-0.3px; }}
-  p {{ color:#475569; font-size:14px; line-height:1.7; margin:0 0 18px; }}
-  .email {{ display:inline-block; background:#f7f8fa; border:1px solid #e8eaed; padding:6px 14px; border-radius:8px; font-size:13px; color:#1a6b4a; font-weight:600; }}
-  .footer {{ margin-top:24px; font-size:12px; color:#94a3b8; }}
-</style></head><body>
+<html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>전인교육학회 수신거부</title>
+<style>{_SUBSCRIBE_PAGE_CSS}</style></head><body>
   <div class="card">
-    <div class="icon">✓</div>
-    <h1>수신거부 처리가 완료되었습니다</h1>
-    <p>아래 이메일 주소는 더 이상 전인교육학회 뉴스레터를<br>수신하지 않습니다.</p>
-    <div class="email">{email}</div>
+    <div class="card-top">
+      <h1>전인교육학회</h1>
+      <p>소식 수신을 원하지 않으시면 아래 버튼을 눌러주세요.</p>
+    </div>
+    <div class="card-body">
+      <form method="POST" action="/api/unsubscribe">
+        <input type="hidden" name="email" value="{_email}">
+        <button type="submit" class="btn danger">수신거부</button>
+      </form>
+    </div>
+    <div class="footer">전인교육학회 Academic Society for Human Completion</div>
+  </div>
+</body></html>""")
+
+
+@app.post("/api/unsubscribe", response_class=HTMLResponse)
+def unsubscribe_submit(email: str = Form(...)):
+    """수신거부 확인 버튼 제출 처리"""
+    import html as _html
+    email = email.strip().lower()
+    if not email or "@" not in email:
+        raise HTTPException(400, "유효하지 않은 이메일입니다.")
+    storage.add_unsubscribed(email)
+    _email = _html.escape(email)
+    return HTMLResponse(f"""<!DOCTYPE html>
+<html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>전인교육학회 수신거부 완료</title>
+<style>{_SUBSCRIBE_PAGE_CSS}</style></head><body>
+  <div class="card">
+    <div class="card-top">
+      <h1>전인교육학회</h1>
+      <p>수신거부 처리가 완료되었습니다.</p>
+    </div>
+    <div class="card-body result">
+      <div class="icon">✓</div>
+      <h2>수신거부 완료</h2>
+      <p>아래 이메일 주소는 더 이상 전인교육학회 소식을 수신하지 않습니다.</p>
+      <div class="email">{_email}</div>
+    </div>
     <div class="footer">잘못 클릭하셨다면 사무국으로 연락 주세요.<br>info@humancompletion.org</div>
   </div>
 </body></html>""")
@@ -334,6 +441,13 @@ _SUBSCRIBE_PAGE_CSS = """
   .consent span { font-size:12px; color:#475569; line-height:1.65; }
   .btn { width:100%; padding:13px; background:#1a6b4a; color:#fff; border:none; border-radius:8px; font-size:15px; font-weight:700; cursor:pointer; transition:background .2s; }
   .btn:hover { background:#15573d; }
+  .btn.danger { background:#9f3131; }
+  .btn.danger:hover { background:#842727; }
+  .result { text-align:center; }
+  .result h2 { font-size:20px; color:#0f172a; margin:0 0 8px; letter-spacing:-0.3px; }
+  .result p { color:#475569; font-size:14px; line-height:1.7; margin:0 0 18px; }
+  .icon { width:64px; height:64px; border-radius:50%; background:#ecf5f0; color:#1a6b4a; display:inline-flex; align-items:center; justify-content:center; font-size:32px; margin-bottom:18px; }
+  .email { display:inline-block; background:#f7f8fa; border:1px solid #e8eaed; padding:6px 14px; border-radius:8px; font-size:13px; color:#1a6b4a; font-weight:600; }
   .footer { text-align:center; padding:0 36px 28px; font-size:11px; color:#94a3b8; line-height:1.6; }
 """
 
@@ -356,11 +470,11 @@ def subscribe_form(email: str = "", name: str = ""):
     _name = _html.escape(name.strip())
     return HTMLResponse(f"""<!DOCTYPE html>
 <html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>전인교육학회 뉴스레터 수신동의</title>
+<title>전인교육학회 수신동의</title>
 <style>{_SUBSCRIBE_PAGE_CSS}</style></head><body>
   <div class="card">
     <div class="card-top">
-      <h1>전인교육학회 뉴스레터</h1>
+      <h1>전인교육학회</h1>
       <p>학회지, 학술대회, 캠프 등 소식을 이메일로 받아보세요.</p>
     </div>
     <div class="card-body">
@@ -459,3 +573,24 @@ def get_manual():
 @app.get("/health")
 def health():
     return {"ok": True}
+
+
+@app.get("/{full_path:path}", include_in_schema=False)
+def serve_frontend(full_path: str):
+    if full_path.startswith("api/"):
+        raise HTTPException(404, "Not found")
+
+    dist = Path(config.FRONTEND_DIST_DIR)
+    index = dist / "index.html"
+    if not index.exists():
+        raise HTTPException(404, "Frontend build not found")
+
+    target = (dist / full_path).resolve()
+    try:
+        target.relative_to(dist.resolve())
+    except ValueError:
+        raise HTTPException(404, "Not found")
+
+    if full_path and target.is_file():
+        return FileResponse(target)
+    return FileResponse(index)

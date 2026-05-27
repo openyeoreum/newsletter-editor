@@ -1,17 +1,44 @@
 import csv
 import io
 import json
-import os
 import uuid
 from datetime import datetime
 from pathlib import Path
 from . import config
 
+try:
+    from supabase import create_client
+except Exception:  # pragma: no cover - local fallback when dependency is absent
+    create_client = None
+
+
+_client = None
+
+
+def using_supabase() -> bool:
+    return bool(config.USE_SUPABASE and create_client)
+
+
+def client():
+    global _client
+    if not using_supabase():
+        raise RuntimeError("Supabase is not configured")
+    if _client is None:
+        _client = create_client(config.SUPABASE_URL, config.SUPABASE_SERVICE_ROLE_KEY)
+    return _client
+
+
+# ========== Local development fallback ==========
+
 DRAFTS = Path(config.DRAFTS_DIR)
-DRAFTS.mkdir(parents=True, exist_ok=True)
+UNSUB = Path(config.UNSUBSCRIBED_FILE)
+SUBS = Path(config.SUBSCRIBERS_FILE)
+_SUBS_HEADER = ["email", "name", "organization", "subscribed_at"]
 
 
-def list_drafts() -> list[dict]:
+def _local_list_drafts() -> list[dict]:
+    if not DRAFTS.exists():
+        return []
     items = []
     for f in sorted(DRAFTS.glob("*.json")):
         try:
@@ -22,52 +49,48 @@ def list_drafts() -> list[dict]:
     return items
 
 
-def get_draft(draft_id: str) -> dict | None:
+def _local_get_draft(draft_id: str) -> dict | None:
     f = DRAFTS / f"{draft_id}.json"
     if not f.exists():
         return None
     return json.loads(f.read_text(encoding="utf-8"))
 
 
-def save_draft(draft: dict) -> dict:
-    # id가 주어지면 덮어쓰기, 없으면 새 파일 생성
+def _unique_name(base_name: str, existing_names: set[str]) -> str:
+    final_name = base_name
+    n = 1
+    while final_name in existing_names:
+        n += 1
+        final_name = f"{base_name} ({n})"
+    return final_name
+
+
+def _local_save_draft(draft: dict) -> dict:
+    DRAFTS.mkdir(parents=True, exist_ok=True)
     if draft.get("id"):
         f = DRAFTS / f"{draft['id']}.json"
         if f.exists():
             f.write_text(json.dumps(draft, ensure_ascii=False, indent=2), encoding="utf-8")
             return draft
 
-    # 새 파일: 같은 이름 있으면 (2), (3)... 자동 부여
     base_name = (draft.get("name") or "untitled").strip()
-    existing_names = set()
-    for f in DRAFTS.glob("*.json"):
-        try:
-            existing_names.add(json.loads(f.read_text(encoding="utf-8")).get("name", ""))
-        except Exception:
-            pass
-    final_name = base_name
-    n = 1
-    while final_name in existing_names:
-        n += 1
-        final_name = f"{base_name} ({n})"
-    draft["name"] = final_name
+    existing_names = {d["name"] for d in _local_list_drafts()}
+    draft["name"] = _unique_name(base_name, existing_names)
     draft["id"] = uuid.uuid4().hex[:8]
-    f = DRAFTS / f"{draft['id']}.json"
-    f.write_text(json.dumps(draft, ensure_ascii=False, indent=2), encoding="utf-8")
+    (DRAFTS / f"{draft['id']}.json").write_text(json.dumps(draft, ensure_ascii=False, indent=2), encoding="utf-8")
     return draft
 
 
-def rename_draft(draft_id: str, new_name: str) -> dict | None:
-    f = DRAFTS / f"{draft_id}.json"
-    if not f.exists():
+def _local_rename_draft(draft_id: str, new_name: str) -> dict | None:
+    d = _local_get_draft(draft_id)
+    if not d:
         return None
-    d = json.loads(f.read_text(encoding="utf-8"))
     d["name"] = new_name.strip() or d.get("name", "untitled")
-    f.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
+    (DRAFTS / f"{draft_id}.json").write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
     return d
 
 
-def delete_draft(draft_id: str) -> bool:
+def _local_delete_draft(draft_id: str) -> bool:
     f = DRAFTS / f"{draft_id}.json"
     if f.exists():
         f.unlink()
@@ -75,12 +98,10 @@ def delete_draft(draft_id: str) -> bool:
     return False
 
 
-# ========== 대표 초안 ==========
-
 _DEFAULT_DRAFT_FILE = DRAFTS / ".default"
 
 
-def get_default_draft_id() -> str | None:
+def _local_get_default_draft_id() -> str | None:
     if _DEFAULT_DRAFT_FILE.exists():
         draft_id = _DEFAULT_DRAFT_FILE.read_text(encoding="utf-8").strip()
         if draft_id and (DRAFTS / f"{draft_id}.json").exists():
@@ -88,55 +109,144 @@ def get_default_draft_id() -> str | None:
     return None
 
 
-def set_default_draft_id(draft_id: str | None) -> bool:
+def _local_set_default_draft_id(draft_id: str | None) -> bool:
     if draft_id is None:
         if _DEFAULT_DRAFT_FILE.exists():
             _DEFAULT_DRAFT_FILE.unlink()
         return True
     if not (DRAFTS / f"{draft_id}.json").exists():
         return False
+    DRAFTS.mkdir(parents=True, exist_ok=True)
     _DEFAULT_DRAFT_FILE.write_text(draft_id, encoding="utf-8")
     return True
 
 
-# ========== 수신거부 관리 ==========
+# ========== Drafts ==========
 
-UNSUB = Path(config.UNSUBSCRIBED_FILE)
+def _draft_from_row(row: dict) -> dict:
+    return {
+        "id": row["id"],
+        "name": row.get("name") or "untitled",
+        "template": row.get("template") or "classic",
+        "subject": row.get("subject") or "",
+        "data": row.get("data") or {},
+    }
 
+
+def list_drafts() -> list[dict]:
+    if not using_supabase():
+        return _local_list_drafts()
+    rows = client().table("drafts").select("id,name,template").order("updated_at", desc=True).execute().data or []
+    return [{"id": r["id"], "name": r.get("name") or r["id"], "template": r.get("template") or "classic"} for r in rows]
+
+
+def get_draft(draft_id: str) -> dict | None:
+    if not using_supabase():
+        return _local_get_draft(draft_id)
+    rows = client().table("drafts").select("*").eq("id", draft_id).limit(1).execute().data or []
+    return _draft_from_row(rows[0]) if rows else None
+
+
+def save_draft(draft: dict) -> dict:
+    if not using_supabase():
+        return _local_save_draft(draft)
+
+    draft = dict(draft)
+    now_id = draft.get("id") or uuid.uuid4().hex[:8]
+    if not draft.get("id"):
+        base_name = (draft.get("name") or "untitled").strip()
+        existing_names = {d["name"] for d in list_drafts()}
+        draft["name"] = _unique_name(base_name, existing_names)
+    draft["id"] = now_id
+
+    payload = {
+        "id": draft["id"],
+        "name": draft.get("name") or "untitled",
+        "template": draft.get("template") or "classic",
+        "subject": draft.get("subject") or "",
+        "data": draft.get("data") or {},
+        "updated_at": datetime.utcnow().isoformat(),
+    }
+    client().table("drafts").upsert(payload).execute()
+    return _draft_from_row(payload)
+
+
+def rename_draft(draft_id: str, new_name: str) -> dict | None:
+    if not using_supabase():
+        return _local_rename_draft(draft_id, new_name)
+    payload = {"name": new_name.strip() or "untitled", "updated_at": datetime.utcnow().isoformat()}
+    rows = client().table("drafts").update(payload).eq("id", draft_id).execute().data or []
+    return get_draft(draft_id) if rows else None
+
+
+def delete_draft(draft_id: str) -> bool:
+    if not using_supabase():
+        return _local_delete_draft(draft_id)
+    client().table("drafts").delete().eq("id", draft_id).execute()
+    return True
+
+
+def get_default_draft_id() -> str | None:
+    if not using_supabase():
+        return _local_get_default_draft_id()
+    rows = client().table("app_settings").select("value").eq("key", "default_draft_id").limit(1).execute().data or []
+    if not rows:
+        return None
+    value = rows[0].get("value")
+    return value.get("id") if isinstance(value, dict) else None
+
+
+def set_default_draft_id(draft_id: str | None) -> bool:
+    if not using_supabase():
+        return _local_set_default_draft_id(draft_id)
+    if draft_id is not None and not get_draft(draft_id):
+        return False
+    payload = {"key": "default_draft_id", "value": {"id": draft_id} if draft_id else None}
+    client().table("app_settings").upsert(payload).execute()
+    return True
+
+
+# ========== Unsubscribed ==========
 
 def load_unsubscribed() -> set[str]:
-    if not UNSUB.exists():
-        return set()
-    return {line.strip().lower() for line in UNSUB.read_text(encoding="utf-8").splitlines() if line.strip()}
+    if not using_supabase():
+        if not UNSUB.exists():
+            return set()
+        return {line.strip().lower() for line in UNSUB.read_text(encoding="utf-8").splitlines() if line.strip()}
+    rows = client().table("unsubscribed").select("email").execute().data or []
+    return {r["email"].strip().lower() for r in rows if r.get("email")}
 
 
 def add_unsubscribed(email: str) -> bool:
     email = email.strip().lower()
     if not email or "@" not in email:
         return False
-    UNSUB.parent.mkdir(parents=True, exist_ok=True)
-    existing = load_unsubscribed()
-    if email in existing:
-        return False
-    with UNSUB.open("a", encoding="utf-8") as f:
-        f.write(email + "\n")
-    return True
+    if not using_supabase():
+        UNSUB.parent.mkdir(parents=True, exist_ok=True)
+        existing = load_unsubscribed()
+        if email in existing:
+            return False
+        with UNSUB.open("a", encoding="utf-8") as f:
+            f.write(email + "\n")
+        return True
+    existed = email in load_unsubscribed()
+    client().table("unsubscribed").upsert({"email": email}).execute()
+    return not existed
 
 
 def remove_unsubscribed(email: str) -> bool:
-    if not UNSUB.exists():
-        return False
     email = email.strip().lower()
-    lines = [l for l in UNSUB.read_text(encoding="utf-8").splitlines() if l.strip().lower() != email]
-    UNSUB.write_text(("\n".join(lines) + "\n") if lines else "", encoding="utf-8")
+    if not using_supabase():
+        if not UNSUB.exists():
+            return False
+        lines = [l for l in UNSUB.read_text(encoding="utf-8").splitlines() if l.strip().lower() != email]
+        UNSUB.write_text(("\n".join(lines) + "\n") if lines else "", encoding="utf-8")
+        return True
+    client().table("unsubscribed").delete().eq("email", email).execute()
     return True
 
 
-# ========== 구독자(수신동의) 관리 ==========
-
-SUBS = Path(config.SUBSCRIBERS_FILE)
-_SUBS_HEADER = ["email", "name", "organization", "subscribed_at"]
-
+# ========== Subscribers ==========
 
 def _ensure_subs_file():
     SUBS.parent.mkdir(parents=True, exist_ok=True)
@@ -145,45 +255,69 @@ def _ensure_subs_file():
 
 
 def load_subscribers() -> list[dict]:
-    if not SUBS.exists():
-        return []
-    rows = []
-    reader = csv.DictReader(io.StringIO(SUBS.read_text(encoding="utf-8")))
-    for row in reader:
-        if row.get("email"):
-            rows.append({k: (row.get(k) or "").strip() for k in _SUBS_HEADER})
-    return rows
+    if not using_supabase():
+        if not SUBS.exists():
+            return []
+        rows = []
+        reader = csv.DictReader(io.StringIO(SUBS.read_text(encoding="utf-8")))
+        for row in reader:
+            if row.get("email"):
+                rows.append({k: (row.get(k) or "").strip() for k in _SUBS_HEADER})
+        return rows
+    rows = client().table("subscribers").select("email,name,organization,subscribed_at").order("subscribed_at", desc=True).execute().data or []
+    return [
+        {
+            "email": r.get("email") or "",
+            "name": r.get("name") or "",
+            "organization": r.get("organization") or "",
+            "subscribed_at": r.get("subscribed_at") or "",
+        }
+        for r in rows
+    ]
 
 
 def add_subscriber(email: str, name: str = "", organization: str = "") -> bool:
     email = email.strip().lower()
     if not email or "@" not in email:
         return False
-    _ensure_subs_file()
+    if not using_supabase():
+        _ensure_subs_file()
+        existing = {s["email"] for s in load_subscribers()}
+        if email in existing:
+            return False
+        with SUBS.open("a", encoding="utf-8", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=_SUBS_HEADER)
+            writer.writerow({
+                "email": email,
+                "name": name.strip(),
+                "organization": organization.strip(),
+                "subscribed_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            })
+        return True
     existing = {s["email"] for s in load_subscribers()}
     if email in existing:
         return False
-    with SUBS.open("a", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=_SUBS_HEADER)
-        writer.writerow({
-            "email": email,
-            "name": name.strip(),
-            "organization": organization.strip(),
-            "subscribed_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
-        })
+    client().table("subscribers").insert({
+        "email": email,
+        "name": name.strip(),
+        "organization": organization.strip(),
+    }).execute()
     return True
 
 
 def remove_subscriber(email: str) -> bool:
-    if not SUBS.exists():
-        return False
     email = email.strip().lower()
-    rows = [s for s in load_subscribers() if s["email"] != email]
-    _ensure_subs_file()
-    with SUBS.open("w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=_SUBS_HEADER)
-        writer.writeheader()
-        writer.writerows(rows)
+    if not using_supabase():
+        if not SUBS.exists():
+            return False
+        rows = [s for s in load_subscribers() if s["email"] != email]
+        _ensure_subs_file()
+        with SUBS.open("w", encoding="utf-8", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=_SUBS_HEADER)
+            writer.writeheader()
+            writer.writerows(rows)
+        return True
+    client().table("subscribers").delete().eq("email", email).execute()
     return True
 
 

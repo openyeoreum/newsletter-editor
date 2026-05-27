@@ -320,25 +320,30 @@ export default function App() {
         return;
       }
       setSendJob({ id: r.job_id, total: r.total, skipped: r.skipped, sent: 0, failed: 0, status: 'running', progress_percent: 0, current_chunk: 0, total_chunks: 0 });
-      // 폴링 시작
+      if (sendPollRef.current) clearTimeout(sendPollRef.current);
       const poll = async () => {
         try {
+          await api.processSend(r.job_id);
           const s = await api.sendStatus(r.job_id);
           setSendJob(s);
           if (s.status === 'done' || s.status === 'failed') {
-            clearInterval(sendPollRef.current);
+            clearTimeout(sendPollRef.current);
+            sendPollRef.current = null;
             const skippedTxt = s.skipped ? ` · ${s.skipped}건 수신거부 제외` : '';
             setSendStatus(`${s.status === 'done' ? '✓' : '✗'} ${s.sent}건 성공 / ${s.failed}건 실패${skippedTxt}` + (s.errors?.length ? '\n\n' + s.errors.slice(0, 10).join('\n') : ''));
+          } else {
+            sendPollRef.current = setTimeout(poll, 1200);
           }
-        } catch (e) { /* 일시적 오류는 무시 */ }
+        } catch (e) {
+          sendPollRef.current = setTimeout(poll, 2500);
+        }
       };
       poll();
-      sendPollRef.current = setInterval(poll, 2000);
     } catch (e) { setSendStatus('실패: ' + e.message); }
   };
 
   // 컴포넌트 unmount 시 폴링 정리
-  useEffect(() => () => { if (sendPollRef.current) clearInterval(sendPollRef.current); }, []);
+  useEffect(() => () => { if (sendPollRef.current) clearTimeout(sendPollRef.current); }, []);
 
   const onTestSend = async () => {
     if (!testEmail || !testEmail.includes('@')) { alert('테스트 발송할 이메일 주소를 입력하세요'); return; }
@@ -346,16 +351,23 @@ export default function App() {
     try {
       const r = await api.send({ sender, template, subject, from_addr: fromAddr, from_name: fromName, recipients: [{ email: testEmail }], data });
       if (!r.job_id) { setSendStatus(r.message || '발송 실패'); return; }
-      // 짧은 폴링
       let tries = 0;
-      const poll = setInterval(async () => {
-        tries++;
-        const s = await api.sendStatus(r.job_id);
-        if (s.status === 'done' || s.status === 'failed' || tries > 30) {
-          clearInterval(poll);
-          setSendStatus(`테스트 ${s.sent ? '✓ 성공' : '✗ 실패'} → ${testEmail}` + (s.errors?.length ? '\n' + s.errors.join('\n') : ''));
+      const poll = async () => {
+        try {
+          tries++;
+          await api.processSend(r.job_id);
+          const s = await api.sendStatus(r.job_id);
+          if (s.status === 'done' || s.status === 'failed' || tries > 30) {
+            setSendStatus(`테스트 ${s.sent ? '✓ 성공' : '✗ 실패'} → ${testEmail}` + (s.errors?.length ? '\n' + s.errors.join('\n') : ''));
+          } else {
+            setTimeout(poll, 1200);
+          }
+        } catch (e) {
+          if (tries > 30) setSendStatus('실패: ' + e.message);
+          else setTimeout(poll, 2000);
         }
-      }, 1500);
+      };
+      poll();
     } catch (e) { setSendStatus('실패: ' + e.message); }
   };
 
@@ -426,7 +438,7 @@ export default function App() {
       <div className="topbar">
         <div className="topbar-title">
           <span className="dot"></span>
-          <strong>전인교육학회 뉴스레터 스튜디오</strong>
+          <strong>전인교육학회 뉴스레터</strong>
           <span className="topbar-sub">· {name}</span>
         </div>
         <div className="topbar-actions">

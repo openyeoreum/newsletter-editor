@@ -30,6 +30,7 @@ export const api = {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   }).then(J),
+  processSend: (jobId) => fetch(`/api/send/${jobId}/process`, { method: 'POST' }).then(J),
   sendStatus: (jobId) => fetch(`/api/send/${jobId}`).then(J),
   manual: () => fetch('/api/manual').then(J),
   unsubscribed: () => fetch('/api/unsubscribed').then(J),

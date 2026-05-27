@@ -11,10 +11,13 @@ EmailTemplate/
 ├── backend/              # FastAPI (Python) — 렌더링, 저장, 발송 API
 ├── frontend/             # React + Vite — 편집기 UI
 ├── templates/            # Jinja2 템플릿 3종 + 공통 매크로
-├── drafts/               # 저장된 뉴스레터 초안 (JSON)
-├── recipients/           # 수신자 CSV
+├── api/                  # Vercel Python Function 진입점
+├── supabase/             # 운영 DB 스키마
+├── drafts/               # 로컬 fallback 초안 (운영은 Supabase)
+├── recipients/           # 로컬 fallback 수신자 파일 (운영은 Supabase)
 ├── image/                # (참고용) 원본 이미지
 ├── compose.yml           # 도커 컴포즈 (backend + frontend + mailhog)
+├── vercel.json           # Vercel 배포 라우팅
 └── .env.example
 ```
 
@@ -41,7 +44,8 @@ cp .env.example .env
 
 | 변수 | 필수 여부 | 설명 |
 |---|---|---|
-| `CLOUDINARY_*` | **필수** | 이메일 클라이언트는 외부에 호스팅된 이미지만 안정적으로 표시. https://cloudinary.com 무료 가입 |
+| `SUPABASE_*` | 운영 필수 | 초안, 구독자, 수신거부, 발송 job 저장 |
+| `CLOUDINARY_*` | 권장 | 이메일 클라이언트는 외부에 호스팅된 이미지만 안정적으로 표시. https://cloudinary.com 무료 가입 |
 | `GMAIL_*` | 선택 | Gmail SMTP 발송 시. 앱 비밀번호 필요 |
 | `NCP_*` | 선택 | 국내 대량 발송용 (네이버 클라우드 플랫폼) |
 
@@ -58,6 +62,10 @@ docker compose up --build
 | MailHog UI | http://localhost:8025 | 로컬 테스트 메일 확인 |
 
 종료: `docker compose down`
+
+### 2-1. 운영 배포
+
+운영 배포는 Vercel + Supabase Postgres 기준입니다. Vercel은 `frontend` Vite 빌드와 FastAPI Python Function을 함께 배포하고, Supabase가 초안/구독자/수신거부/발송 job을 보관합니다. 자세한 설정은 [`DEPLOY.md`](DEPLOY.md)를 참고하세요.
 
 ### 3. 도커 없이 로컬 실행 (선택)
 
@@ -83,7 +91,7 @@ cd frontend && npm install && npm run dev
    - 발송 방식 선택 (MailHog / Gmail / NCP)
    - 수신자 CSV 업로드 (`email` 단일 컬럼 또는 `email,name` 모두 지원)
    - **테스트 발송** → 한 명에게만 보내 확인
-   - **전체 발송** → 전체 수신자에게 일괄 발송
+   - **전체 발송** → Supabase job으로 등록 후 배치 단위로 발송
 7. **⬇ HTML 다운로드** → 다른 메일 서비스에 붙여넣을 수 있는 HTML 파일 생성
 
 ---
@@ -179,7 +187,10 @@ class MyNewSender:
 | DELETE | `/api/drafts/{id}` | 초안 삭제 |
 | POST | `/api/upload-image` | 이미지 → Cloudinary URL |
 | POST | `/api/parse-recipients` | CSV 파싱 |
-| POST | `/api/send` | 메일 발송 |
+| POST | `/api/send` | 발송 job 생성 |
+| POST | `/api/send/{job_id}/process` | 발송 job 배치 처리 |
+| GET | `/api/send/{job_id}` | 발송 job 상태 조회 |
+| GET | `/api/jobs` | 최근 발송 job 목록 |
 
 전체 스펙: http://localhost:8000/docs
 
@@ -187,8 +198,9 @@ class MyNewSender:
 
 ## ✅ 체크리스트
 
-- [ ] `.env` 파일 작성 (Cloudinary 필수)
+- [ ] `.env` 파일 작성 (운영은 Supabase 필수)
 - [ ] `docker compose up --build` 실행
 - [ ] http://localhost:5173 접속해서 편집기 동작 확인
 - [ ] http://localhost:8025 에서 MailHog로 테스트 발송 확인
-- [ ] (선택) NCP 키 등록 후 실제 대량 발송 테스트
+- [ ] Supabase SQL Editor에서 `supabase/schema.sql` 실행
+- [ ] Vercel 환경변수와 `newsletter.humancompletion.org` 도메인 연결
