@@ -352,7 +352,7 @@ class UnsubIn(BaseModel):
 
 
 @app.get("/api/unsubscribe", response_class=HTMLResponse)
-def unsubscribe_landing(email: str):
+def unsubscribe_landing(email: str = ""):
     """이메일에서 수신거부 링크 클릭 시 진입하는 확인 페이지"""
     import html as _html
     _email = _html.escape(email.strip())
@@ -363,12 +363,13 @@ def unsubscribe_landing(email: str):
   <div class="card">
     <div class="card-top">
       <h1>전인교육학회</h1>
-      <p>소식 수신을 원하지 않으시면 아래 버튼을 눌러주세요.</p>
+      <p>소식 수신을 원하지 않으시면 이메일 주소를 확인해 주세요.</p>
     </div>
     <div class="card-body">
       <form method="POST" action="/api/unsubscribe">
-        <input type="hidden" name="email" value="{_email}">
-        <button type="submit" class="btn danger">수신거부</button>
+        <label>이메일 <span class="req">*</span></label>
+        <input type="email" name="email" required placeholder="example@email.com" value="{_email}">
+        <button type="submit" class="btn">수신거부</button>
       </form>
     </div>
     <div class="footer">전인교육학회 Academic Society for Human Completion</div>

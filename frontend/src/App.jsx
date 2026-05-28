@@ -747,7 +747,7 @@ export default function App() {
                     window.open(`${location.origin}/api/subscribe`, '_blank');
                   }}><Icon name="eye" size={12}/> 수신동의 미리보기</button>
                   <button className="secondary sm" onClick={() => {
-                    window.open(`${location.origin}/api/unsubscribe?email=preview@example.com`, '_blank');
+                    window.open(`${location.origin}/api/unsubscribe`, '_blank');
                   }}><Icon name="eye" size={12}/> 수신거부 미리보기</button>
                 </div>
               </div>
