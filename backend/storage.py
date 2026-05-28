@@ -296,9 +296,6 @@ def add_unsubscribed(email: str) -> bool:
         with UNSUB.open("a", encoding="utf-8") as f:
             f.write(email + "\n")
         return True
-    existed = email in load_unsubscribed()
-    if existed:
-        return False
     try:
         client().table("unsubscribed").insert({"email": email}).execute()
         return True
@@ -390,9 +387,6 @@ def add_subscriber(email: str, name: str = "", organization: str = "") -> bool:
                 "subscribed_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
             })
         return True
-    existing = {s["email"] for s in load_subscribers()}
-    if email in existing:
-        return False
     payload = {
         "email": email,
         "name": name.strip(),
