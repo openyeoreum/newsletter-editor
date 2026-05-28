@@ -894,7 +894,9 @@ export default function App() {
                   <div className="draft-item" key={s.email}>
                     <div className="draft-item-info">
                       <div className="draft-item-name">{s.name || '(이름 없음)'} <span style={{ fontWeight: 400, color: 'var(--text-3)' }}>{s.organization && `· ${s.organization}`}</span></div>
-                      <div className="draft-item-meta" style={{ fontFamily: "'SF Mono', Menlo, monospace" }}>{s.email} · {s.subscribed_at}</div>
+                      <div className="draft-item-meta" style={{ fontFamily: "'SF Mono', Menlo, monospace" }}>
+                        {s.email} · {s.subscribed_at}{s.consent_version ? ` · ${s.consent_version}` : ''}
+                      </div>
                     </div>
                     <button className="danger sm" onClick={async ()=>{ if(confirm(`${s.email} 구독자를 삭제하시겠습니까?`)){ await api.removeSubscriber(s.email); refreshSubs(); } }}>삭제</button>
                   </div>

@@ -19,8 +19,20 @@ create table if not exists public.subscribers (
   email text primary key,
   name text not null default '',
   organization text not null default '',
-  subscribed_at timestamptz not null default now()
+  subscribed_at timestamptz not null default now(),
+  consent_source text not null default 'public_subscribe_form',
+  consent_version text not null default '',
+  ip text not null default '',
+  user_agent text not null default ''
 );
+
+alter table public.subscribers
+  add column if not exists organization text not null default '',
+  add column if not exists subscribed_at timestamptz not null default now(),
+  add column if not exists consent_source text not null default 'public_subscribe_form',
+  add column if not exists consent_version text not null default '',
+  add column if not exists ip text not null default '',
+  add column if not exists user_agent text not null default '';
 
 create table if not exists public.unsubscribed (
   email text primary key,

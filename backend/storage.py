@@ -34,7 +34,16 @@ DRAFTS = Path(config.DRAFTS_DIR)
 SAMPLE_DRAFT = Path(config.PROJECT_ROOT) / "drafts" / "sample.json"
 UNSUB = Path(config.UNSUBSCRIBED_FILE)
 SUBS = Path(config.SUBSCRIBERS_FILE)
-_SUBS_HEADER = ["email", "name", "organization", "subscribed_at"]
+_SUBS_HEADER = [
+    "email",
+    "name",
+    "organization",
+    "subscribed_at",
+    "consent_source",
+    "consent_version",
+    "ip",
+    "user_agent",
+]
 _UNSUB_HEADER = ["email", "unsubscribed_at"]
 
 
@@ -364,12 +373,24 @@ def load_subscribers() -> list[dict]:
             "name": r.get("name") or "",
             "organization": r.get("organization") or "",
             "subscribed_at": r.get("subscribed_at") or r.get("created_at") or "",
+            "consent_source": r.get("consent_source") or "",
+            "consent_version": r.get("consent_version") or "",
+            "ip": r.get("ip") or "",
+            "user_agent": r.get("user_agent") or "",
         }
         for r in rows
     ]
 
 
-def add_subscriber(email: str, name: str = "", organization: str = "") -> bool:
+def add_subscriber(
+    email: str,
+    name: str = "",
+    organization: str = "",
+    consent_source: str = "",
+    consent_version: str = "",
+    ip: str = "",
+    user_agent: str = "",
+) -> bool:
     email = email.strip().lower()
     if not email or "@" not in email:
         return False
@@ -385,28 +406,34 @@ def add_subscriber(email: str, name: str = "", organization: str = "") -> bool:
                 "name": name.strip(),
                 "organization": organization.strip(),
                 "subscribed_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                "consent_source": consent_source.strip(),
+                "consent_version": consent_version.strip(),
+                "ip": ip.strip(),
+                "user_agent": user_agent.strip(),
             })
         return True
     payload = {
         "email": email,
         "name": name.strip(),
         "organization": organization.strip(),
+        "consent_source": consent_source.strip(),
+        "consent_version": consent_version.strip(),
+        "ip": ip.strip()[:128],
+        "user_agent": user_agent.strip()[:512],
     }
-    try:
-        client().table("subscribers").insert(payload).execute()
-    except Exception as exc:
-        message = str(exc).lower()
-        if "23505" in message or "duplicate" in message or "unique" in message:
-            return False
-        if "organization" not in message:
-            raise
-        payload.pop("organization", None)
+    optional_fields = ["organization", "consent_source", "consent_version", "ip", "user_agent"]
+    while True:
         try:
             client().table("subscribers").insert(payload).execute()
-        except Exception as retry_exc:
-            retry_message = str(retry_exc).lower()
-            if "23505" in retry_message or "duplicate" in retry_message or "unique" in retry_message:
+            break
+        except Exception as exc:
+            message = str(exc).lower()
+            if "23505" in message or "duplicate" in message or "unique" in message:
                 return False
+            missing = next((field for field in optional_fields if field in payload and field in message), None)
+            if missing:
+                payload.pop(missing, None)
+                continue
             raise
     return True
 

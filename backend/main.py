@@ -14,6 +14,7 @@ from . import config, storage, renderer, senders, jobs
 from .senders.base import Recipient
 
 app = FastAPI(title="전인교육학회 뉴스레터 API")
+CONSENT_VERSION = "newsletter-consent-v1-2026-05-28"
 
 app.add_middleware(
     CORSMiddleware,
@@ -609,6 +610,7 @@ def subscribe_form(email: str = "", name: str = ""):
 
 @app.post("/api/subscribe", response_class=HTMLResponse)
 def subscribe_submit(
+    request: Request,
     email: str = Form(...),
     name: str = Form(""),
     organization: str = Form(""),
@@ -625,7 +627,17 @@ def subscribe_submit(
             success=False,
         )
     try:
-        added = storage.add_subscriber(email, name, organization)
+        forwarded_for = request.headers.get("x-forwarded-for", "")
+        ip = forwarded_for.split(",", 1)[0].strip() or (request.client.host if request.client else "")
+        added = storage.add_subscriber(
+            email,
+            name,
+            organization,
+            consent_source="public_subscribe_form",
+            consent_version=CONSENT_VERSION,
+            ip=ip,
+            user_agent=request.headers.get("user-agent", ""),
+        )
     except Exception as exc:
         print(f"subscribe failed for {email}: {exc}")
         return _public_status_page(
