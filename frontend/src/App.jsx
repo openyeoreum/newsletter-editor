@@ -746,18 +746,28 @@ export default function App() {
                   <button className="secondary sm" onClick={() => {
                     window.open(`${location.origin}/api/subscribe`, '_blank');
                   }}><Icon name="eye" size={12}/> 수신동의 미리보기</button>
-                  <button className="secondary sm" onClick={() => {
-                    window.open(`${location.origin}/api/unsubscribe`, '_blank');
-                  }}><Icon name="eye" size={12}/> 수신거부 미리보기</button>
                 </div>
               </div>
 
               <div className="section">
                 <div className="section-title">수신거부 명단</div>
                 <p className="muted" style={{ marginBottom: 8 }}>수신거부한 이메일은 발송 시 자동으로 제외됩니다.</p>
-                <button className="secondary" style={{ width: '100%' }} onClick={() => { refreshUnsub(); setUnsubModal(true); }}>
-                  <Icon name="drafts" size={14}/> 수신거부 명단 보기 ({unsubList.length}명)
-                </button>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                  <button className="secondary" style={{ flex: 1 }} onClick={() => { refreshUnsub(); setUnsubModal(true); }}>
+                    <Icon name="drafts" size={14}/> 명단 보기 ({unsubList.length}명)
+                  </button>
+                  <button className="secondary" style={{ flex: 1 }} onClick={async () => {
+                    const blob = await api.exportUnsubscribed();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a'); a.href = url; a.download = 'unsubscribed.csv'; a.click();
+                    URL.revokeObjectURL(url);
+                  }}>
+                    <Icon name="download" size={14}/> CSV 내보내기
+                  </button>
+                </div>
+                <button className="secondary sm" style={{ width: '100%' }} onClick={() => {
+                  window.open(`${location.origin}/api/unsubscribe`, '_blank');
+                }}><Icon name="eye" size={12}/> 수신거부 미리보기</button>
               </div>
 
               <div className="dispatch-card">

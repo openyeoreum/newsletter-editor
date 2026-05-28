@@ -35,6 +35,7 @@ SAMPLE_DRAFT = Path(config.PROJECT_ROOT) / "drafts" / "sample.json"
 UNSUB = Path(config.UNSUBSCRIBED_FILE)
 SUBS = Path(config.SUBSCRIBERS_FILE)
 _SUBS_HEADER = ["email", "name", "organization", "subscribed_at"]
+_UNSUB_HEADER = ["email", "unsubscribed_at"]
 
 
 def _local_list_drafts() -> list[dict]:
@@ -310,6 +311,26 @@ def remove_unsubscribed(email: str) -> bool:
         return True
     client().table("unsubscribed").delete().eq("email", email).execute()
     return True
+
+
+def export_unsubscribed_csv() -> str:
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=_UNSUB_HEADER)
+    writer.writeheader()
+    if not using_supabase():
+        writer.writerows({"email": email, "unsubscribed_at": ""} for email in sorted(load_unsubscribed()))
+        return buf.getvalue()
+    rows = (
+        client()
+        .table("unsubscribed")
+        .select("email,unsubscribed_at")
+        .order("unsubscribed_at", desc=True)
+        .execute()
+        .data
+        or []
+    )
+    writer.writerows(rows)
+    return buf.getvalue()
 
 
 # ========== Subscribers ==========

@@ -411,6 +411,16 @@ def list_unsubscribed():
     return {"emails": sorted(storage.load_unsubscribed())}
 
 
+@app.get("/api/unsubscribed/export")
+def export_unsubscribed():
+    csv_str = storage.export_unsubscribed_csv()
+    return Response(
+        content=csv_str,
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="unsubscribed.csv"'},
+    )
+
+
 @app.post("/api/unsubscribed")
 def post_unsubscribe(body: UnsubIn):
     added = storage.add_unsubscribed(body.email)
