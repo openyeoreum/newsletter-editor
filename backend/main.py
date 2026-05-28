@@ -504,9 +504,22 @@ _PUBLIC_PAGE_CSS = """
   label .req { color:#e53e3e; }
   input[type=text], input[type=email] { width:100%; min-height:42px; padding:10px 13px; border:1px solid #d9e2dc; border-radius:8px; background:#ffffff; color:#0f172a; font-size:14px; font-family:inherit; outline:none; transition:border .2s, box-shadow .2s; }
   input:focus { border-color:#1a6b4a; box-shadow:0 0 0 3px rgba(26,107,74,0.11); }
-  .consent { display:flex; gap:10px; align-items:flex-start; margin:18px 0 24px; padding:14px 16px; background:#f8faf9; border-radius:8px; border:1px solid #e8efe9; }
-  .consent input[type=checkbox] { margin-top:3px; accent-color:#1a6b4a; flex-shrink:0; }
-  .consent span { font-size:12px; color:#475569; line-height:1.65; }
+  .consent { margin:18px 0 24px; padding:15px 16px; background:#f8faf9; border-radius:8px; border:1px solid #e8efe9; }
+  .consent-row { display:flex; gap:10px; align-items:flex-start; }
+  .consent input[type=checkbox] { width:16px; height:16px; margin:3px 0 0; accent-color:#1a6b4a; flex-shrink:0; }
+  .consent-label { display:block; margin:0; color:#334155; font-size:12.5px; font-weight:500; line-height:1.65; cursor:pointer; }
+  .consent-label strong { display:block; color:#1f2937; font-size:13px; font-weight:800; }
+  .consent-label span { display:block; margin-top:2px; color:#64748b; }
+  .consent-detail { margin-top:12px; border-top:1px solid #e3ebe6; padding-top:10px; }
+  .consent-detail summary { cursor:pointer; color:#1a6b4a; font-size:12px; font-weight:800; line-height:1.5; list-style:none; }
+  .consent-detail summary::-webkit-details-marker { display:none; }
+  .consent-detail summary::after { content:'보기'; float:right; color:#64748b; font-weight:700; }
+  .consent-detail[open] summary::after { content:'닫기'; }
+  .notice-list { margin:10px 0 0; padding:0; border:1px solid #edf2ee; border-radius:8px; overflow:hidden; background:#ffffff; }
+  .notice-row { display:grid; grid-template-columns:92px 1fr; margin:0; border-top:1px solid #edf2ee; }
+  .notice-row:first-child { border-top:0; }
+  .notice-row dt { margin:0; padding:9px 10px; background:#f7faf8; color:#52635a; font-size:11.5px; font-weight:800; line-height:1.55; }
+  .notice-row dd { margin:0; padding:9px 10px; color:#475569; font-size:11.5px; line-height:1.65; }
   .btn { width:100%; min-height:44px; padding:12px 16px; background:#1a6b4a; color:#fff; border:none; border-radius:8px; font-size:14px; font-weight:800; font-family:inherit; cursor:pointer; transition:background .2s, transform .2s; }
   .btn:hover { background:#15573d; transform:translateY(-1px); }
   .result { text-align:center; }
@@ -557,12 +570,34 @@ def subscribe_form(email: str = "", name: str = ""):
           <input type="text" name="organization" placeholder="대학교/기관명 (선택)">
         </div>
         <div class="consent">
-          <input type="checkbox" id="agree" name="agree" required>
-          <span>
-            <strong>개인정보 수집 및 이용 동의</strong><br>
-            전인교육학회는 뉴스레터 발송을 위해 이름, 이메일, 소속 정보를 수집합니다.
-            수집된 정보는 뉴스레터 발송 목적으로만 사용되며, 수신거부 시 즉시 파기합니다.
-          </span>
+          <div class="consent-row">
+            <input type="checkbox" id="agree" name="agree" required>
+            <label for="agree" class="consent-label">
+              <strong>개인정보 수집 및 이용에 동의합니다.</strong>
+              <span>뉴스레터 발송을 위한 필수 동의입니다.</span>
+            </label>
+          </div>
+          <details class="consent-detail">
+            <summary>개인정보 수집 및 이용 안내</summary>
+            <dl class="notice-list">
+              <div class="notice-row">
+                <dt>수집 목적</dt>
+                <dd>전인교육학회 뉴스레터, 학회지, 학술대회, 캠프 등 소식 및 안내 이메일 발송</dd>
+              </div>
+              <div class="notice-row">
+                <dt>수집 항목</dt>
+                <dd>필수: 이름, 이메일 / 선택: 소속</dd>
+              </div>
+              <div class="notice-row">
+                <dt>보유 기간</dt>
+                <dd>수신동의 철회 또는 수신거부 시까지 보관합니다. 수신거부 시 발송 명단에서는 제외되며, 재발송 방지를 위해 이메일 주소는 수신거부 명단으로 보관됩니다.</dd>
+              </div>
+              <div class="notice-row">
+                <dt>동의 거부</dt>
+                <dd>동의를 거부할 권리가 있으며, 거부 시 뉴스레터 및 관련 소식 이메일을 받을 수 없습니다.</dd>
+              </div>
+            </dl>
+          </details>
         </div>
         <button type="submit" class="btn">수신동의</button>
       </form>
