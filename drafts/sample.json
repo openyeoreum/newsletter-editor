@@ -1,0 +1,83 @@
+{
+  "id": "sample",
+  "name": "예시 초안 - 260408 뉴스레터 (Vol.01)",
+  "template": "classic",
+  "subject": "[전인교육학회 뉴스레터] 대한민국 인성시민교육대상 수상 등 | 2026년 4월 호 - Vol.24",
+  "data": {
+    "org_name": "전인교육학회",
+    "org_subtitle": "Academic Society for Human Completion",
+    "org_url": "https://humancompletion.org/",
+    "volume": "24",
+    "issue_date": "2026년 4월",
+    "web_view_url": "https://humancompletion.org/",
+    "greeting": {
+      "photo": "https://res.cloudinary.com/dvu60bmlq/image/upload/v1775645596/newsletter/cdjrt3tqkikcgjjqzqls.jpg",
+      "name": "인사말",
+      "title": "전인교육학회 회장 · 카이스트 명예교수 이덕주",
+      "body": "회원 여러분, 따스한 봄 인사를 드립니다.\n\n쉼이 필요할 때 우리는 보통 멈추거나, 잠시 떠나거나, 아무것도 하지 않는 시간을 떠올립니다.\n하지만 진짜 휴식은 몸을 쉬게 하는 것만으로는 충분하지 않습니다.\n\n이 프로그램은 단순히 일상을 멈추는 휴식이 아니라, 머릿속을 채우던 생각과 마음의 무게를 천천히 덜어내며 내면 깊은 곳까지 편안해지는 진짜 휴식을 경험하는 2박3일 명상 클래스입니다.\n\n바쁘게 달려온 전문가와 교수분들께 깊은 휴식의 시간을 약속합니다.",
+      "signature": "전인교육학회 드림",
+      "showPhoto": false
+    },
+    "articles": [
+      {
+        "image": "https://res.cloudinary.com/dvu60bmlq/image/upload/v1775645607/newsletter/pr8lfkjdikfp9ccndfoo.jpg",
+        "badge_text": "명상 프로그램",
+        "title": "2023 교수 전문가 명상 7회",
+        "summary": "교수와 전문가를 위한 명상 프로그램의 일곱 번째 여정을 함께한 참가자들의 이야기를 전합니다. 명상을 통해 교육 현장에서의 내면의 힘을 키워가는 시간이었습니다.",
+        "meta": "전인교육학회 · 명상 프로그램",
+        "link": "https://humancompletion.org/2023-교수-전문가-명상-7회/",
+        "layout": "hero"
+      },
+      {
+        "image": "https://res.cloudinary.com/dvu60bmlq/image/upload/v1775645620/newsletter/tqd9m5buevjabi58niub.jpg",
+        "badge_text": "자격 검정",
+        "title": "2024년 10기 청소년명상지도사 양성교육 검정계획 공고",
+        "summary": "청소년을 대상으로 명상을 지도할 전문 인력을 양성하는 제10기 교육과정의 검정계획이 공고되었습니다. 관심 있는 회원분들의 많은 참여를 바랍니다.",
+        "meta": "사무국 · 자격검정 안내",
+        "link": "https://humancompletion.org/청소년명상지도사-양성교육-검정계획-공고/",
+        "layout": "image_left"
+      },
+      {
+        "image": "https://res.cloudinary.com/dvu60bmlq/image/upload/v1775809718/newsletter/eqppeyj2fz22doommbv6.jpg",
+        "badge_text": "수상 소식",
+        "title": "전인교육학회, 2024 대한민국 인성시민교육대상 수상",
+        "summary": "전인교육학회가 인성과 시민교육 분야에서의 공로를 인정받아 2024 대한민국 인성시민교육대상을 수상하였습니다. 회원 여러분의 헌신이 만들어낸 값진 성과입니다.",
+        "meta": "학회 소식 · 2024 수상",
+        "link": "humancompletion",
+        "layout": "image_left"
+      },
+      {
+        "image": "https://res.cloudinary.com/dvu60bmlq/image/upload/v1775809708/newsletter/qqtw46krfeyrkguj8syi.jpg",
+        "badge_text": "학술대회",
+        "title": "추계 학술대회",
+        "summary": "전인교육학회가 주최한 가을 학술대회가 성황리에 개최되었습니다. '최고의 가치를 만나다'를 주제로 교수님들이 명상을 통해 내면의 평안과 교육적 영감을 발견하는 뜻깊은 시간이었습니다.",
+        "meta": "전인교육학회 · 학술대회",
+        "link": "https://humancompletion.org/2017-%ec%b6%94%ea%b3%84/",
+        "layout": "card_banner"
+      },
+      {
+        "image": "https://res.cloudinary.com/dvu60bmlq/image/upload/v1775645684/newsletter/kxis5ltvf05noaczea55.jpg",
+        "badge_text": "학회지",
+        "title": "Journal of Human Completion Vol. 11 발간",
+        "summary": "전인교육학회 학회지 제11권이 발간되었습니다. 명상 교육의 최신 연구 동향과 현장 적용 사례를 담은 논문들을 만나보실 수 있습니다.",
+        "meta": "학회지 · 2023.12. 발간",
+        "link": "https://humancompletion.org/학회지-vol-11/",
+        "layout": "image_left_tall"
+      }
+    ],
+    "footer": {
+      "address": "연락처 · 041-000-0000",
+      "contact": "이메일 · office@humancompletion.org",
+      "links": [
+        {
+          "text": "홈페이지",
+          "url": "https://humancompletion.org/"
+        },
+        {
+          "text": "학회소개",
+          "url": "https://humancompletion.org/about"
+        }
+      ]
+    }
+  }
+}

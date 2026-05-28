@@ -41,8 +41,8 @@ def _authorized(auth_header: str | None) -> bool:
     except Exception:
         return False
     return (
-        secrets.compare_digest(username, config.ADMIN_USERNAME)
-        and secrets.compare_digest(password, config.ADMIN_PASSWORD)
+        secrets.compare_digest(username.encode("utf-8"), config.ADMIN_USERNAME.encode("utf-8"))
+        and secrets.compare_digest(password.encode("utf-8"), config.ADMIN_PASSWORD.encode("utf-8"))
     )
 
 

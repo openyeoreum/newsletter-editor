@@ -2,7 +2,7 @@ import csv
 import io
 import json
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from . import config
 
@@ -31,6 +31,7 @@ def client():
 # ========== Local development fallback ==========
 
 DRAFTS = Path(config.DRAFTS_DIR)
+SAMPLE_DRAFT = Path(config.PROJECT_ROOT) / "drafts" / "sample.json"
 UNSUB = Path(config.UNSUBSCRIBED_FILE)
 SUBS = Path(config.SUBSCRIBERS_FILE)
 _SUBS_HEADER = ["email", "name", "organization", "subscribed_at"]
@@ -133,9 +134,44 @@ def _draft_from_row(row: dict) -> dict:
     }
 
 
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _load_sample_draft() -> dict | None:
+    if not SAMPLE_DRAFT.exists():
+        return None
+    try:
+        return json.loads(SAMPLE_DRAFT.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def _seed_sample_draft_if_empty() -> None:
+    if not using_supabase():
+        return
+    existing = client().table("drafts").select("id").limit(1).execute().data or []
+    if existing:
+        return
+    sample = _load_sample_draft()
+    if not sample:
+        return
+    payload = {
+        "id": sample.get("id") or "sample",
+        "name": sample.get("name") or "예시 초안",
+        "template": sample.get("template") or "classic",
+        "subject": sample.get("subject") or "",
+        "data": sample.get("data") or {},
+        "updated_at": _utc_now(),
+    }
+    client().table("drafts").upsert(payload).execute()
+    client().table("app_settings").upsert({"key": "default_draft_id", "value": {"id": payload["id"]}}).execute()
+
+
 def list_drafts() -> list[dict]:
     if not using_supabase():
         return _local_list_drafts()
+    _seed_sample_draft_if_empty()
     rows = client().table("drafts").select("id,name,template").order("updated_at", desc=True).execute().data or []
     return [{"id": r["id"], "name": r.get("name") or r["id"], "template": r.get("template") or "classic"} for r in rows]
 
@@ -143,6 +179,7 @@ def list_drafts() -> list[dict]:
 def get_draft(draft_id: str) -> dict | None:
     if not using_supabase():
         return _local_get_draft(draft_id)
+    _seed_sample_draft_if_empty()
     rows = client().table("drafts").select("*").eq("id", draft_id).limit(1).execute().data or []
     return _draft_from_row(rows[0]) if rows else None
 
@@ -165,7 +202,7 @@ def save_draft(draft: dict) -> dict:
         "template": draft.get("template") or "classic",
         "subject": draft.get("subject") or "",
         "data": draft.get("data") or {},
-        "updated_at": datetime.utcnow().isoformat(),
+        "updated_at": _utc_now(),
     }
     client().table("drafts").upsert(payload).execute()
     return _draft_from_row(payload)
@@ -174,7 +211,7 @@ def save_draft(draft: dict) -> dict:
 def rename_draft(draft_id: str, new_name: str) -> dict | None:
     if not using_supabase():
         return _local_rename_draft(draft_id, new_name)
-    payload = {"name": new_name.strip() or "untitled", "updated_at": datetime.utcnow().isoformat()}
+    payload = {"name": new_name.strip() or "untitled", "updated_at": _utc_now()}
     rows = client().table("drafts").update(payload).eq("id", draft_id).execute().data or []
     return get_draft(draft_id) if rows else None
 
@@ -189,6 +226,7 @@ def delete_draft(draft_id: str) -> bool:
 def get_default_draft_id() -> str | None:
     if not using_supabase():
         return _local_get_default_draft_id()
+    _seed_sample_draft_if_empty()
     rows = client().table("app_settings").select("value").eq("key", "default_draft_id").limit(1).execute().data or []
     if not rows:
         return None
