@@ -13,6 +13,18 @@ _env = Environment(
 )
 
 
+def _is_valid_image_url(value) -> bool:
+    url = str(value or "").strip()
+    return bool(
+        url
+        and url != "https://..."
+        and url.startswith(("http://", "https://", "data:image"))
+    )
+
+
+_env.tests["valid_image"] = _is_valid_image_url
+
+
 def render(template_key: str, data: dict) -> str:
     if template_key not in AVAILABLE_TEMPLATES:
         raise ValueError(f"Unknown template: {template_key}")

@@ -17,12 +17,15 @@
       {% for a in articles %}
       {% set _w = 140 if loop.last else 100 %}
       {% set _h = 190 if loop.last else 100 %}
+      {% set has_image = a.image is valid_image %}
       <tr><td style="padding:0 40px 24px;" class="mobile-padding">
         <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"><tr>
+          {% if has_image %}
           <td width="{{ _w }}" class="mobile-stack" style="vertical-align:top;">
             <a href="{{ a.link }}" style="text-decoration:none;"><img src="{{ a.image }}" data-img="article-{{ loop.index0 }}" alt="{{ a.title }}" width="{{ _w }}" style="width:{{ _w }}px; height:{{ _h }}px; display:block; object-fit:cover; border-radius:10px;" class="{% if loop.last %}mobile-img-tall{% else %}mobile-img{% endif %}"></a>
           </td>
           <td width="20" class="mobile-hide">&nbsp;</td>
+          {% endif %}
           <td class="mobile-stack" style="vertical-align:top;">
             <div style="font-size:10px; color:#1a6b4a; letter-spacing:1.5px; font-weight:700; text-transform:uppercase;"><span data-field="articles.{{ loop.index0 }}.badge_text">{{ a.badge_text }}</span> · {{ '%02d' % loop.index }}</div>
             <div style="padding-top:6px; color:#1a1a1a; font-size:17px; font-weight:700; line-height:1.4; letter-spacing:-0.3px;">

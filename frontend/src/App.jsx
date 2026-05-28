@@ -40,6 +40,11 @@ function setByPath(obj, path, value) {
   cur[isNaN(last) ? last : parseInt(last, 10)] = value;
 }
 
+function isPreviewImageUrl(value) {
+  const url = String(value || '').trim();
+  return Boolean(url && url !== 'https://...' && (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:image')));
+}
+
 export default function App() {
   const [templates, setTemplates] = useState([]);
   const [senders, setSenders] = useState([]);
@@ -515,7 +520,7 @@ export default function App() {
                 {data.greeting.showPhoto !== false && (<>
                   <input value={data.greeting.photo} onChange={e=>updateGreeting('photo', e.target.value)} placeholder="https://..." />
                   <Dropzone onFile={file=>onUploadImage(file, url=>updateGreeting('photo', url))} hint="권장 160×160 (정사각)" />
-                  {data.greeting.photo && <img src={data.greeting.photo} className="thumb" alt="" />}
+                  {isPreviewImageUrl(data.greeting.photo) && <img src={data.greeting.photo} className="thumb" alt="" />}
                 </>)}
                 <div className="row">
                   <div><label>이름</label><input value={data.greeting.name} onChange={e=>updateGreeting('name', e.target.value)} /></div>
@@ -569,7 +574,7 @@ export default function App() {
                     <label>이미지</label>
                     <input value={a.image} onChange={e=>updateArticle(i, 'image', e.target.value)} placeholder="https://..." />
                     <Dropzone onFile={file=>onUploadImage(file, url=>updateArticle(i, 'image', url))} hint="권장 1080px 폭 · 3:2 비율" />
-                    {a.image && <img src={a.image} className="thumb" alt="" />}
+                    {isPreviewImageUrl(a.image) && <img src={a.image} className="thumb" alt="" />}
                     <label>카테고리 뱃지</label>
                     <input value={a.badge_text} onChange={e=>updateArticle(i, 'badge_text', e.target.value)} />
                     <label>제목</label>
@@ -731,7 +736,7 @@ export default function App() {
                     <Icon name="download" size={14}/> 수신자로 불러오기
                   </button>
                 </div>
-                <div style={{ display: 'flex', gap: 6 }}>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   <button className="secondary sm" onClick={async () => {
                     const blob = await api.exportSubscribers();
                     const url = URL.createObjectURL(blob);
@@ -741,6 +746,9 @@ export default function App() {
                   <button className="secondary sm" onClick={() => {
                     window.open(`${location.origin}/api/subscribe`, '_blank');
                   }}><Icon name="eye" size={12}/> 수신동의 미리보기</button>
+                  <button className="secondary sm" onClick={() => {
+                    window.open(`${location.origin}/api/unsubscribe?email=preview@example.com`, '_blank');
+                  }}><Icon name="eye" size={12}/> 수신거부 미리보기</button>
                 </div>
               </div>
 
