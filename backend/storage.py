@@ -147,17 +147,22 @@ def _load_sample_draft() -> dict | None:
         return None
 
 
-def _seed_sample_draft_if_empty() -> None:
+def _supabase_draft_exists(draft_id: str) -> bool:
+    rows = client().table("drafts").select("id").eq("id", draft_id).limit(1).execute().data or []
+    return bool(rows)
+
+
+def _ensure_sample_draft() -> None:
     if not using_supabase():
-        return
-    existing = client().table("drafts").select("id").limit(1).execute().data or []
-    if existing:
         return
     sample = _load_sample_draft()
     if not sample:
         return
+    sample_id = sample.get("id") or "sample"
+    if _supabase_draft_exists(sample_id):
+        return
     payload = {
-        "id": sample.get("id") or "sample",
+        "id": sample_id,
         "name": sample.get("name") or "예시 초안",
         "template": sample.get("template") or "classic",
         "subject": sample.get("subject") or "",
@@ -165,13 +170,17 @@ def _seed_sample_draft_if_empty() -> None:
         "updated_at": _utc_now(),
     }
     client().table("drafts").upsert(payload).execute()
-    client().table("app_settings").upsert({"key": "default_draft_id", "value": {"id": payload["id"]}}).execute()
+    rows = client().table("app_settings").select("value").eq("key", "default_draft_id").limit(1).execute().data or []
+    default_value = rows[0].get("value") if rows else None
+    default_id = default_value.get("id") if isinstance(default_value, dict) else None
+    if not default_id or not _supabase_draft_exists(default_id):
+        client().table("app_settings").upsert({"key": "default_draft_id", "value": {"id": payload["id"]}}).execute()
 
 
 def list_drafts() -> list[dict]:
     if not using_supabase():
         return _local_list_drafts()
-    _seed_sample_draft_if_empty()
+    _ensure_sample_draft()
     rows = client().table("drafts").select("id,name,template").order("updated_at", desc=True).execute().data or []
     return [{"id": r["id"], "name": r.get("name") or r["id"], "template": r.get("template") or "classic"} for r in rows]
 
@@ -179,7 +188,7 @@ def list_drafts() -> list[dict]:
 def get_draft(draft_id: str) -> dict | None:
     if not using_supabase():
         return _local_get_draft(draft_id)
-    _seed_sample_draft_if_empty()
+    _ensure_sample_draft()
     rows = client().table("drafts").select("*").eq("id", draft_id).limit(1).execute().data or []
     return _draft_from_row(rows[0]) if rows else None
 
@@ -226,7 +235,7 @@ def delete_draft(draft_id: str) -> bool:
 def get_default_draft_id() -> str | None:
     if not using_supabase():
         return _local_get_default_draft_id()
-    _seed_sample_draft_if_empty()
+    _ensure_sample_draft()
     rows = client().table("app_settings").select("value").eq("key", "default_draft_id").limit(1).execute().data or []
     if not rows:
         return None
