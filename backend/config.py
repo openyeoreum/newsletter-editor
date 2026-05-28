@@ -1,10 +1,23 @@
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _default_path(env_name: str, local_path: str, docker_path: str) -> str:
+    value = os.getenv(env_name)
+    if value:
+        return value
+    local = PROJECT_ROOT / local_path
+    if local.exists():
+        return str(local)
+    return docker_path
+
 APP_ENV = os.getenv("APP_ENV", "development").lower()
-FRONTEND_DIST_DIR = os.getenv("FRONTEND_DIST_DIR", "/app/frontend/dist")
+FRONTEND_DIST_DIR = _default_path("FRONTEND_DIST_DIR", "frontend/dist", "/app/frontend/dist")
 
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
@@ -33,7 +46,7 @@ CLOUDINARY_API_KEY = os.getenv("CLOUDINARY_API_KEY", "")
 CLOUDINARY_API_SECRET = os.getenv("CLOUDINARY_API_SECRET", "")
 
 DRAFTS_DIR = os.getenv("DRAFTS_DIR", "/data/drafts")
-TEMPLATES_DIR = os.getenv("TEMPLATES_DIR", "/app/templates")
+TEMPLATES_DIR = _default_path("TEMPLATES_DIR", "templates", "/app/templates")
 RECIPIENTS_DIR = os.getenv("RECIPIENTS_DIR", "/data/recipients")
 UNSUBSCRIBED_FILE = os.getenv("UNSUBSCRIBED_FILE", "/data/recipients/unsubscribed.csv")
 SUBSCRIBERS_FILE = os.getenv("SUBSCRIBERS_FILE", "/data/recipients/subscribers.csv")
