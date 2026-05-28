@@ -370,13 +370,20 @@ def _public_status_page(
         f"""<!DOCTYPE html>
 <html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>{_html.escape(title)}</title>
-<style>{_SUBSCRIBE_SUCCESS_CSS}</style></head><body>
+<style>{_PUBLIC_PAGE_CSS}</style></head><body>
   <div class="card">
-    <div class="{icon_class}">{icon}</div>
-    <h1>{_html.escape(heading)}</h1>
-    <p>{message}</p>
-    {email_html}
-    <div class="footer">{footer}</div>
+    <div class="card-top">
+      <div class="kicker">처리 결과</div>
+      <h1>전인교육학회</h1>
+      <p>요청하신 처리 결과를 확인해 주세요.</p>
+    </div>
+    <div class="card-body status">
+      <div class="{icon_class}">{icon}</div>
+      <h2>{_html.escape(heading)}</h2>
+      <p>{message}</p>
+      {email_html}
+    </div>
+    <div class="card-footer">{footer}</div>
   </div>
 </body></html>""",
         status_code=status_code,
@@ -391,20 +398,23 @@ def unsubscribe_landing(email: str = ""):
     return HTMLResponse(f"""<!DOCTYPE html>
 <html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>전인교육학회 수신거부</title>
-<style>{_SUBSCRIBE_PAGE_CSS}</style></head><body>
+<style>{_PUBLIC_PAGE_CSS}</style></head><body>
   <div class="card">
     <div class="card-top">
+      <div class="kicker">수신거부</div>
       <h1>전인교육학회</h1>
       <p>더 이상 소식을 원하지 않으시면 이메일 작성 후 수신거부를 눌러주세요.</p>
     </div>
     <div class="card-body">
       <form method="POST" action="/api/unsubscribe">
-        <label>이메일 <span class="req">*</span></label>
-        <input type="email" name="email" required placeholder="example@email.com" value="{_email}">
+        <div class="form-field">
+          <label>이메일 <span class="req">*</span></label>
+          <input type="email" name="email" required placeholder="example@email.com" value="{_email}">
+        </div>
         <button type="submit" class="btn">수신거부</button>
       </form>
     </div>
-    <div class="footer">전인교육학회 Academic Society for Human Completion</div>
+    <div class="card-footer">전인교육학회 Academic Society for Human Completion</div>
   </div>
 </body></html>""")
 
@@ -480,42 +490,39 @@ def delete_unsubscribed(email: str):
 
 # ========== 수신동의(구독) ==========
 
-_SUBSCRIBE_PAGE_CSS = """
+_PUBLIC_PAGE_CSS = """
   * { box-sizing: border-box; }
-  body { font-family: 'Apple SD Gothic Neo','Malgun Gothic',sans-serif; background:#f5f5f5; margin:0; padding:0; display:flex; align-items:center; justify-content:center; min-height:100vh; }
-  .card { background:#fff; border-radius:14px; box-shadow:0 12px 32px rgba(15,23,42,0.08); max-width:460px; width:100%; margin:20px; overflow:hidden; }
-  .card-top { background:#1a6b4a; padding:28px 36px; color:#fff; }
-  .card-top h1 { margin:0; font-size:20px; font-weight:800; letter-spacing:-0.3px; }
-  .card-top p { margin:6px 0 0; font-size:13px; opacity:0.85; }
-  .card-body { padding:32px 36px; }
+  body { font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif; background:#f4f6f5; color:#0f172a; margin:0; padding:24px; display:flex; align-items:center; justify-content:center; min-height:100vh; }
+  .card { background:#ffffff; border:1px solid #e3e9e5; border-radius:14px; box-shadow:0 18px 48px rgba(15,23,42,0.10); max-width:460px; width:100%; overflow:hidden; }
+  .card-top { background:#1a6b4a; padding:30px 34px 25px; color:#ffffff; }
+  .kicker { margin:0 0 8px; color:rgba(255,255,255,0.72); font-size:11px; font-weight:800; letter-spacing:0.14em; text-transform:uppercase; }
+  .card-top h1 { margin:0; font-size:22px; font-weight:800; line-height:1.25; letter-spacing:-0.3px; }
+  .card-top p { margin:8px 0 0; font-size:13px; line-height:1.65; color:rgba(255,255,255,0.86); }
+  .card-body { padding:30px 34px 28px; }
+  .form-field { margin-bottom:16px; }
   label { display:block; font-size:13px; font-weight:600; color:#334155; margin-bottom:6px; }
   label .req { color:#e53e3e; }
-  input[type=text], input[type=email] { width:100%; padding:10px 14px; border:1px solid #e2e8f0; border-radius:8px; font-size:14px; margin-bottom:16px; outline:none; transition:border .2s; }
-  input:focus { border-color:#1a6b4a; box-shadow:0 0 0 3px rgba(26,107,74,0.1); }
+  input[type=text], input[type=email] { width:100%; min-height:42px; padding:10px 13px; border:1px solid #d9e2dc; border-radius:8px; background:#ffffff; color:#0f172a; font-size:14px; font-family:inherit; outline:none; transition:border .2s, box-shadow .2s; }
+  input:focus { border-color:#1a6b4a; box-shadow:0 0 0 3px rgba(26,107,74,0.11); }
   .consent { display:flex; gap:10px; align-items:flex-start; margin:18px 0 24px; padding:14px 16px; background:#f8faf9; border-radius:8px; border:1px solid #e8efe9; }
   .consent input[type=checkbox] { margin-top:3px; accent-color:#1a6b4a; flex-shrink:0; }
   .consent span { font-size:12px; color:#475569; line-height:1.65; }
-  .btn { width:100%; padding:13px; background:#1a6b4a; color:#fff; border:none; border-radius:8px; font-size:15px; font-weight:700; cursor:pointer; transition:background .2s; }
-  .btn:hover { background:#15573d; }
-  .btn.danger { background:#9f3131; }
-  .btn.danger:hover { background:#842727; }
+  .btn { width:100%; min-height:44px; padding:12px 16px; background:#1a6b4a; color:#fff; border:none; border-radius:8px; font-size:14px; font-weight:800; font-family:inherit; cursor:pointer; transition:background .2s, transform .2s; }
+  .btn:hover { background:#15573d; transform:translateY(-1px); }
   .result { text-align:center; }
-  .result h2 { font-size:20px; color:#0f172a; margin:0 0 8px; letter-spacing:-0.3px; }
-  .result p { color:#475569; font-size:14px; line-height:1.7; margin:0 0 18px; }
-  .icon { width:64px; height:64px; border-radius:50%; background:#ecf5f0; color:#1a6b4a; display:inline-flex; align-items:center; justify-content:center; font-size:32px; margin-bottom:18px; }
-  .email { display:inline-block; background:#f7f8fa; border:1px solid #e8eaed; padding:6px 14px; border-radius:8px; font-size:13px; color:#1a6b4a; font-weight:600; }
-  .footer { text-align:center; padding:0 36px 28px; font-size:11px; color:#94a3b8; line-height:1.6; }
-"""
-
-_SUBSCRIBE_SUCCESS_CSS = """
-  body { font-family: 'Apple SD Gothic Neo','Malgun Gothic',sans-serif; background:#f5f5f5; margin:0; padding:0; display:flex; align-items:center; justify-content:center; min-height:100vh; }
-  .card { background:#fff; border-radius:14px; box-shadow:0 12px 32px rgba(15,23,42,0.08); padding:48px 56px; max-width:440px; text-align:center; }
-  .icon { width:64px; height:64px; border-radius:50%; background:#ecf5f0; color:#1a6b4a; display:inline-flex; align-items:center; justify-content:center; font-size:32px; margin-bottom:18px; }
+  .status { padding-top:32px; text-align:center; }
+  .icon { width:58px; height:58px; border-radius:50%; background:#ecf5f0; color:#1a6b4a; display:inline-flex; align-items:center; justify-content:center; font-size:28px; font-weight:800; margin:0 auto 18px; }
   .icon.warn { background:#fff7ed; color:#b45309; }
-  h1 { font-size:20px; color:#0f172a; margin:0 0 8px; letter-spacing:-0.3px; }
-  p { color:#475569; font-size:14px; line-height:1.7; margin:0 0 18px; }
-  .email { display:inline-block; background:#f7f8fa; border:1px solid #e8eaed; padding:6px 14px; border-radius:8px; font-size:13px; color:#1a6b4a; font-weight:600; }
-  .footer { margin-top:24px; font-size:12px; color:#94a3b8; }
+  .status h2 { color:#0f172a; font-size:20px; font-weight:800; line-height:1.35; letter-spacing:-0.3px; margin:0 0 9px; }
+  .status p { color:#475569; font-size:14px; line-height:1.75; margin:0 0 18px; }
+  .email { display:inline-block; max-width:100%; overflow-wrap:anywhere; background:#f7f9f8; border:1px solid #dde6e0; padding:7px 14px; border-radius:8px; color:#1a6b4a; font-size:13px; font-weight:700; }
+  .card-footer { border-top:1px solid #edf2ee; padding:17px 34px 22px; color:#8a9a91; font-size:11px; line-height:1.6; text-align:center; }
+  @media (max-width:480px) {
+    body { padding:16px; }
+    .card-top { padding:28px 24px 23px; }
+    .card-body { padding:28px 24px 26px; }
+    .card-footer { padding:16px 24px 21px; }
+  }
 """
 
 
@@ -528,20 +535,27 @@ def subscribe_form(email: str = "", name: str = ""):
     return HTMLResponse(f"""<!DOCTYPE html>
 <html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>전인교육학회 수신동의</title>
-<style>{_SUBSCRIBE_PAGE_CSS}</style></head><body>
+<style>{_PUBLIC_PAGE_CSS}</style></head><body>
   <div class="card">
     <div class="card-top">
+      <div class="kicker">수신동의</div>
       <h1>전인교육학회</h1>
       <p>학회지, 학술대회, 캠프 등 소식을 이메일로 받아보세요.</p>
     </div>
     <div class="card-body">
       <form method="POST" action="/api/subscribe">
-        <label>이름 <span class="req">*</span></label>
-        <input type="text" name="name" required placeholder="홍길동" value="{_name}">
-        <label>이메일 <span class="req">*</span></label>
-        <input type="email" name="email" required placeholder="example@email.com" value="{_email}">
-        <label>소속</label>
-        <input type="text" name="organization" placeholder="대학교/기관명 (선택)">
+        <div class="form-field">
+          <label>이름 <span class="req">*</span></label>
+          <input type="text" name="name" required placeholder="홍길동" value="{_name}">
+        </div>
+        <div class="form-field">
+          <label>이메일 <span class="req">*</span></label>
+          <input type="email" name="email" required placeholder="example@email.com" value="{_email}">
+        </div>
+        <div class="form-field">
+          <label>소속</label>
+          <input type="text" name="organization" placeholder="대학교/기관명 (선택)">
+        </div>
         <div class="consent">
           <input type="checkbox" id="agree" name="agree" required>
           <span>
@@ -553,7 +567,7 @@ def subscribe_form(email: str = "", name: str = ""):
         <button type="submit" class="btn">수신동의</button>
       </form>
     </div>
-    <div class="footer">전인교육학회 Academic Society for Human Completion</div>
+    <div class="card-footer">전인교육학회 Academic Society for Human Completion</div>
   </div>
 </body></html>""")
 
