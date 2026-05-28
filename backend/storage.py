@@ -152,6 +152,22 @@ def _supabase_draft_exists(draft_id: str) -> bool:
     return bool(rows)
 
 
+def _draft_has_meaningful_content(draft: dict | None) -> bool:
+    if not draft:
+        return False
+    data = draft.get("data") or {}
+    greeting = data.get("greeting") or {}
+    articles = data.get("articles") or []
+    has_greeting = bool((greeting.get("body") or "").strip())
+    has_articles = any((a.get("title") or "").strip() or (a.get("image") or "").strip() for a in articles if isinstance(a, dict))
+    return has_greeting and has_articles
+
+
+def _get_supabase_draft_row(draft_id: str) -> dict | None:
+    rows = client().table("drafts").select("*").eq("id", draft_id).limit(1).execute().data or []
+    return rows[0] if rows else None
+
+
 def _ensure_sample_draft() -> None:
     if not using_supabase():
         return
@@ -159,8 +175,6 @@ def _ensure_sample_draft() -> None:
     if not sample:
         return
     sample_id = sample.get("id") or "sample"
-    if _supabase_draft_exists(sample_id):
-        return
     payload = {
         "id": sample_id,
         "name": sample.get("name") or "예시 초안",
@@ -169,11 +183,16 @@ def _ensure_sample_draft() -> None:
         "data": sample.get("data") or {},
         "updated_at": _utc_now(),
     }
-    client().table("drafts").upsert(payload).execute()
+
+    sample_row = _get_supabase_draft_row(sample_id)
+    if not _draft_has_meaningful_content(sample_row):
+        client().table("drafts").upsert(payload).execute()
+
     rows = client().table("app_settings").select("value").eq("key", "default_draft_id").limit(1).execute().data or []
     default_value = rows[0].get("value") if rows else None
     default_id = default_value.get("id") if isinstance(default_value, dict) else None
-    if not default_id or not _supabase_draft_exists(default_id):
+    default_row = _get_supabase_draft_row(default_id) if default_id else None
+    if not _draft_has_meaningful_content(default_row):
         client().table("app_settings").upsert({"key": "default_draft_id", "value": {"id": payload["id"]}}).execute()
 
 
