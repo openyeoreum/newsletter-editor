@@ -363,7 +363,7 @@ def unsubscribe_landing(email: str = ""):
   <div class="card">
     <div class="card-top">
       <h1>전인교육학회</h1>
-      <p>소식 수신을 원하지 않으시면 이메일 주소를 확인해 주세요.</p>
+      <p>더 이상 학회의 소식을 원하지 않으시면 이메일 작성 후 수신거부를 눌러주세요.</p>
     </div>
     <div class="card-body">
       <form method="POST" action="/api/unsubscribe">
