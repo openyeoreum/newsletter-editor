@@ -351,6 +351,38 @@ class UnsubIn(BaseModel):
     email: str
 
 
+def _public_status_page(
+    *,
+    title: str,
+    heading: str,
+    message: str,
+    email: str = "",
+    status_code: int = 200,
+    success: bool = True,
+    footer: str = "전인교육학회 Academic Society for Human Completion",
+):
+    import html as _html
+
+    icon = "✓" if success else "!"
+    icon_class = "icon" if success else "icon warn"
+    email_html = f'<div class="email">{_html.escape(email)}</div>' if email else ""
+    return HTMLResponse(
+        f"""<!DOCTYPE html>
+<html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>{_html.escape(title)}</title>
+<style>{_SUBSCRIBE_SUCCESS_CSS}</style></head><body>
+  <div class="card">
+    <div class="{icon_class}">{icon}</div>
+    <h1>{_html.escape(heading)}</h1>
+    <p>{message}</p>
+    {email_html}
+    <div class="footer">{footer}</div>
+  </div>
+</body></html>""",
+        status_code=status_code,
+    )
+
+
 @app.get("/api/unsubscribe", response_class=HTMLResponse)
 def unsubscribe_landing(email: str = ""):
     """이메일에서 수신거부 링크 클릭 시 진입하는 확인 페이지"""
@@ -380,30 +412,43 @@ def unsubscribe_landing(email: str = ""):
 @app.post("/api/unsubscribe", response_class=HTMLResponse)
 def unsubscribe_submit(email: str = Form(...)):
     """수신거부 확인 버튼 제출 처리"""
-    import html as _html
     email = email.strip().lower()
     if not email or "@" not in email:
-        raise HTTPException(400, "유효하지 않은 이메일입니다.")
-    storage.add_unsubscribed(email)
-    _email = _html.escape(email)
-    return HTMLResponse(f"""<!DOCTYPE html>
-<html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>전인교육학회 수신거부 완료</title>
-<style>{_SUBSCRIBE_PAGE_CSS}</style></head><body>
-  <div class="card">
-    <div class="card-top">
-      <h1>전인교육학회</h1>
-      <p>수신거부 처리가 완료되었습니다.</p>
-    </div>
-    <div class="card-body result">
-      <div class="icon">✓</div>
-      <h2>수신거부 완료</h2>
-      <p>아래 이메일 주소는 더 이상 전인교육학회 소식을 수신하지 않습니다.</p>
-      <div class="email">{_email}</div>
-    </div>
-    <div class="footer">잘못 클릭하셨다면 사무국으로 연락 주세요.<br>info@humancompletion.org</div>
-  </div>
-</body></html>""")
+        return _public_status_page(
+            title="수신거부 오류",
+            heading="이메일 주소를 확인해 주세요",
+            message="유효한 이메일 주소를 입력한 뒤 다시 시도해 주세요.",
+            status_code=400,
+            success=False,
+        )
+    try:
+        added = storage.add_unsubscribed(email)
+    except Exception as exc:
+        print(f"unsubscribe failed for {email}: {exc}")
+        return _public_status_page(
+            title="수신거부 오류",
+            heading="수신거부 처리에 실패했습니다",
+            message="잠시 후 다시 시도해 주세요.<br>문제가 계속되면 사무국으로 연락해 주세요.",
+            email=email,
+            status_code=500,
+            success=False,
+            footer="info@humancompletion.org",
+        )
+    if added:
+        return _public_status_page(
+            title="전인교육학회 수신거부 완료",
+            heading="수신거부가 완료되었습니다",
+            message="아래 이메일 주소는 더 이상 전인교육학회 소식을 수신하지 않습니다.",
+            email=email,
+            footer="잘못 클릭하셨다면 사무국으로 연락 주세요.<br>info@humancompletion.org",
+        )
+    return _public_status_page(
+        title="전인교육학회 수신거부 확인",
+        heading="이미 수신거부된 이메일입니다",
+        message="아래 이메일 주소는 이미 수신거부 명단에 등록되어 있습니다.",
+        email=email,
+        footer="잘못 클릭하셨다면 사무국으로 연락 주세요.<br>info@humancompletion.org",
+    )
 
 
 @app.get("/api/unsubscribed")
@@ -466,6 +511,7 @@ _SUBSCRIBE_SUCCESS_CSS = """
   body { font-family: 'Apple SD Gothic Neo','Malgun Gothic',sans-serif; background:#f5f5f5; margin:0; padding:0; display:flex; align-items:center; justify-content:center; min-height:100vh; }
   .card { background:#fff; border-radius:14px; box-shadow:0 12px 32px rgba(15,23,42,0.08); padding:48px 56px; max-width:440px; text-align:center; }
   .icon { width:64px; height:64px; border-radius:50%; background:#ecf5f0; color:#1a6b4a; display:inline-flex; align-items:center; justify-content:center; font-size:32px; margin-bottom:18px; }
+  .icon.warn { background:#fff7ed; color:#b45309; }
   h1 { font-size:20px; color:#0f172a; margin:0 0 8px; letter-spacing:-0.3px; }
   p { color:#475569; font-size:14px; line-height:1.7; margin:0 0 18px; }
   .email { display:inline-block; background:#f7f8fa; border:1px solid #e8eaed; padding:6px 14px; border-radius:8px; font-size:13px; color:#1a6b4a; font-weight:600; }
@@ -522,26 +568,38 @@ def subscribe_submit(
     """수신동의 폼 제출 처리"""
     email = email.strip().lower()
     if not email or "@" not in email:
-        raise HTTPException(400, "유효하지 않은 이메일입니다.")
-    added = storage.add_subscriber(email, name, organization)
+        return _public_status_page(
+            title="수신동의 오류",
+            heading="이메일 주소를 확인해 주세요",
+            message="유효한 이메일 주소를 입력한 뒤 다시 시도해 주세요.",
+            status_code=400,
+            success=False,
+        )
+    try:
+        added = storage.add_subscriber(email, name, organization)
+    except Exception as exc:
+        print(f"subscribe failed for {email}: {exc}")
+        return _public_status_page(
+            title="수신동의 오류",
+            heading="수신동의 처리에 실패했습니다",
+            message="잠시 후 다시 시도해 주세요.<br>문제가 계속되면 사무국으로 연락해 주세요.",
+            email=email,
+            status_code=500,
+            success=False,
+            footer="info@humancompletion.org",
+        )
     if added:
         msg_title = "수신동의가 완료되었습니다"
         msg_body = "앞으로 전인교육학회 뉴스레터를<br>이메일로 받아보실 수 있습니다."
     else:
         msg_title = "이미 등록된 이메일입니다"
         msg_body = "해당 이메일은 이미 수신동의 되어 있습니다.<br>추가 조치가 필요하지 않습니다."
-    return HTMLResponse(f"""<!DOCTYPE html>
-<html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>수신동의 완료</title>
-<style>{_SUBSCRIBE_SUCCESS_CSS}</style></head><body>
-  <div class="card">
-    <div class="icon">✓</div>
-    <h1>{msg_title}</h1>
-    <p>{msg_body}</p>
-    <div class="email">{email}</div>
-    <div class="footer">전인교육학회 Academic Society for Human Completion</div>
-  </div>
-</body></html>""")
+    return _public_status_page(
+        title="수신동의 완료",
+        heading=msg_title,
+        message=msg_body,
+        email=email,
+    )
 
 
 @app.get("/api/subscribers")

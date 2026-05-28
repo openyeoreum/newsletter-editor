@@ -297,8 +297,16 @@ def add_unsubscribed(email: str) -> bool:
             f.write(email + "\n")
         return True
     existed = email in load_unsubscribed()
-    client().table("unsubscribed").upsert({"email": email}).execute()
-    return not existed
+    if existed:
+        return False
+    try:
+        client().table("unsubscribed").insert({"email": email}).execute()
+        return True
+    except Exception as exc:
+        message = str(exc).lower()
+        if "23505" in message or "duplicate" in message or "unique" in message:
+            return False
+        raise
 
 
 def remove_unsubscribed(email: str) -> bool:
@@ -351,13 +359,14 @@ def load_subscribers() -> list[dict]:
             if row.get("email"):
                 rows.append({k: (row.get(k) or "").strip() for k in _SUBS_HEADER})
         return rows
-    rows = client().table("subscribers").select("email,name,organization,subscribed_at").order("subscribed_at", desc=True).execute().data or []
+    rows = client().table("subscribers").select("*").execute().data or []
+    rows.sort(key=lambda row: row.get("subscribed_at") or row.get("created_at") or "", reverse=True)
     return [
         {
             "email": r.get("email") or "",
             "name": r.get("name") or "",
             "organization": r.get("organization") or "",
-            "subscribed_at": r.get("subscribed_at") or "",
+            "subscribed_at": r.get("subscribed_at") or r.get("created_at") or "",
         }
         for r in rows
     ]
@@ -384,11 +393,27 @@ def add_subscriber(email: str, name: str = "", organization: str = "") -> bool:
     existing = {s["email"] for s in load_subscribers()}
     if email in existing:
         return False
-    client().table("subscribers").insert({
+    payload = {
         "email": email,
         "name": name.strip(),
         "organization": organization.strip(),
-    }).execute()
+    }
+    try:
+        client().table("subscribers").insert(payload).execute()
+    except Exception as exc:
+        message = str(exc).lower()
+        if "23505" in message or "duplicate" in message or "unique" in message:
+            return False
+        if "organization" not in message:
+            raise
+        payload.pop("organization", None)
+        try:
+            client().table("subscribers").insert(payload).execute()
+        except Exception as retry_exc:
+            retry_message = str(retry_exc).lower()
+            if "23505" in retry_message or "duplicate" in retry_message or "unique" in retry_message:
+                return False
+            raise
     return True
 
 
