@@ -355,7 +355,7 @@ export default function App() {
       setRecipientFilter(r);
     } catch (e) {
       setRecipientFilter(null);
-      setRecipientFilterError(e.message || '이메일 DB 정리에 실패했습니다.');
+      setRecipientFilterError(e.message || '이메일 수신거부 정리에 실패했습니다.');
     } finally {
       setRecipientFiltering(false);
     }
@@ -372,14 +372,14 @@ export default function App() {
 
   const onDownloadFilteredRecipients = () => {
     const kept = recipientFilter?.kept || [];
-    if (!kept.length) { alert('다운로드할 남은 명단이 없습니다.'); return; }
-    downloadCsvRecords(kept, recipientFilter.columns || [], 'filtered_recipients.csv');
+    if (!kept.length) { alert('다운로드할 정리된 명단이 없습니다.'); return; }
+    downloadCsvRecords(kept, recipientFilter.columns || [], 'unsubscribe_filtered_recipients.csv');
   };
 
   const onDownloadExcludedRecipients = () => {
     const excluded = filterExcluded();
     if (!excluded.length) { alert('제외된 명단이 없습니다.'); return; }
-    downloadCsvRecords(excluded, recipientFilter.columns || [], 'excluded_recipients.csv', [
+    downloadCsvRecords(excluded, recipientFilter.columns || [], 'unsubscribe_filter_excluded.csv', [
       { label: '제외 사유', value: r => FILTER_REASON_LABELS[r.reason] || r.reason || '' },
       { label: '판별 이메일', value: r => r.email || '' },
     ]);
@@ -798,12 +798,12 @@ export default function App() {
               </div>
 
               <div className="section">
-                <div className="section-title">이메일 DB 정리</div>
-                <p className="muted" style={{ marginBottom: 8 }}>CSV / Excel DB에서 수신거부, 중복, 오류 이메일을 제외하고 남은 명단만 도출합니다.</p>
+                <div className="section-title">이메일 수신거부 정리</div>
+                <p className="muted" style={{ marginBottom: 8 }}>CSV / Excel 이메일 명단에서 수신거부, 중복, 오류 이메일을 제외하고 정리된 명단만 도출합니다.</p>
                 <Dropzone
                   onFile={onFilterRecipients}
                   accept=".csv,.txt,.xlsx,.xlsm"
-                  hint="원본 컬럼을 유지한 채 정리할 CSV 또는 Excel 파일 업로드"
+                  hint="원본 컬럼을 유지한 채 수신거부 정리할 CSV 또는 Excel 파일 업로드"
                   validate={f => /\.(csv|txt|xlsx|xlsm)$/i.test(f.name)}
                 />
                 {recipientFiltering && (
@@ -821,7 +821,7 @@ export default function App() {
                       </div>
                       <div className="filter-stat is-kept">
                         <strong>{recipientFilter.counts?.kept ?? 0}</strong>
-                        <span>남은 명단</span>
+                        <span>정리된 명단</span>
                       </div>
                       <div className="filter-stat">
                         <strong>{recipientFilter.counts?.unsubscribed ?? 0}</strong>
@@ -838,13 +838,13 @@ export default function App() {
                     </div>
                     <div className="filter-actions">
                       <button className="secondary sm" onClick={onDownloadFilteredRecipients}>
-                        <Icon name="download" size={12}/> 남은 명단 CSV 다운로드
+                        <Icon name="download" size={12}/> 정리된 명단 CSV 다운로드
                       </button>
                       <button className="secondary sm" onClick={onUseFilteredRecipients}>
-                        <Icon name="check" size={12}/> 남은 명단을 수신자로 사용
+                        <Icon name="check" size={12}/> 정리된 명단을 수신자로 사용
                       </button>
                       <button className="secondary sm" onClick={onDownloadExcludedRecipients}>
-                        <Icon name="drafts" size={12}/> 제외된 명단 CSV 다운로드
+                        <Icon name="drafts" size={12}/> 제외 명단 CSV 다운로드
                       </button>
                     </div>
                   </div>
