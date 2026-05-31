@@ -26,6 +26,10 @@ export const api = {
     const fd = new FormData(); fd.append('file', file);
     return fetch('/api/parse-recipients', { method: 'POST', body: fd }).then(J);
   },
+  filterRecipients: (file) => {
+    const fd = new FormData(); fd.append('file', file);
+    return fetch('/api/filter-recipients', { method: 'POST', body: fd }).then(J);
+  },
   send: (payload) => fetch('/api/send', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),

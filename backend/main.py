@@ -1,6 +1,7 @@
 import csv
 import base64
 import io
+import re
 import secrets
 from pathlib import Path
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Request
@@ -177,6 +178,188 @@ async def upload_image(file: UploadFile = File(...)):
     content = await file.read()
     res = cloudinary.uploader.upload(content, folder="newsletter")
     return {"url": res["secure_url"], "public_id": res["public_id"]}
+
+
+EMAIL_RE = re.compile(r"^[^@\s<>;,]+@[^@\s<>;,]+\.[^@\s<>;,]+$")
+EMAIL_HEADER_KEYS = {
+    "email",
+    "emailaddress",
+    "mail",
+    "메일",
+    "메일주소",
+    "이메일",
+    "이메일주소",
+    "전자메일",
+    "전자우편",
+    "수신이메일",
+    "수신자이메일",
+}
+NAME_HEADER_KEYS = {"name", "fullname", "recipient", "recipientname", "이름", "성명", "수신자", "받는사람"}
+
+
+def _clean_cell(value) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def _normalize_header(value) -> str:
+    return re.sub(r"[\s_\-().]+", "", _clean_cell(value).lower())
+
+
+def _normalize_email(value) -> str:
+    return _clean_cell(value).lower()
+
+
+def _is_valid_email(value) -> bool:
+    return bool(EMAIL_RE.match(_normalize_email(value)))
+
+
+def _unique_columns(raw_header: list[str], width: int) -> list[str]:
+    columns: list[str] = []
+    seen: dict[str, int] = {}
+    for i in range(width):
+        base = _clean_cell(raw_header[i]) if i < len(raw_header) else ""
+        if not base:
+            base = f"column_{i + 1}"
+        count = seen.get(base, 0)
+        seen[base] = count + 1
+        columns.append(base if count == 0 else f"{base}_{count + 1}")
+    return columns
+
+
+def _decode_table_text(content: bytes) -> str:
+    try:
+        return content.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        try:
+            return content.decode("cp949")
+        except UnicodeDecodeError:
+            return content.decode("utf-8", errors="replace")
+
+
+def _table_rows_from_upload(filename: str, content: bytes) -> list[list[str]]:
+    if filename.endswith(".xlsx") or filename.endswith(".xlsm"):
+        try:
+            from openpyxl import load_workbook
+            wb = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+            ws = wb.active
+            rows = [[_clean_cell(cell) for cell in row] for row in ws.iter_rows(values_only=True)]
+        except Exception as e:
+            raise HTTPException(400, f"Excel 파싱 실패: {e}")
+    else:
+        raw = _decode_table_text(content)
+        try:
+            dialect = csv.Sniffer().sniff(raw[:4096], delimiters=",\t;")
+        except csv.Error:
+            dialect = csv.excel
+        rows = [[_clean_cell(cell) for cell in row] for row in csv.reader(io.StringIO(raw), dialect)]
+    return [row for row in rows if any(cell for cell in row)]
+
+
+def _header_email_index(row: list[str]) -> int | None:
+    for i, value in enumerate(row):
+        if _normalize_header(value) in EMAIL_HEADER_KEYS:
+            return i
+    return None
+
+
+def _header_name_index(columns: list[str]) -> int | None:
+    for i, value in enumerate(columns):
+        if _normalize_header(value) in NAME_HEADER_KEYS:
+            return i
+    return None
+
+
+def _best_email_column(rows: list[list[str]], width: int) -> int | None:
+    best_i = None
+    best_count = 0
+    for i in range(width):
+        count = sum(1 for row in rows if i < len(row) and _is_valid_email(row[i]))
+        if count > best_count:
+            best_i = i
+            best_count = count
+    return best_i if best_count else None
+
+
+def _tabular_records(rows: list[list[str]]) -> tuple[list[str], list[dict], int | None, int | None]:
+    if not rows:
+        return [], [], None, None
+    width = max(len(row) for row in rows)
+    first = rows[0]
+    header_email_i = _header_email_index(first)
+
+    if header_email_i is not None:
+        columns = _unique_columns(first, width)
+        data_rows = rows[1:]
+        email_i = header_email_i
+    else:
+        first_has_email = any(_is_valid_email(cell) for cell in first)
+        email_i_after_header = _best_email_column(rows[1:], width) if len(rows) > 1 else None
+        if not first_has_email and email_i_after_header is not None:
+            columns = _unique_columns(first, width)
+            data_rows = rows[1:]
+            email_i = email_i_after_header
+        else:
+            columns = [f"column_{i + 1}" for i in range(width)]
+            data_rows = rows
+            email_i = _best_email_column(rows, width)
+
+    name_i = _header_name_index(columns)
+    records = []
+    for row in data_rows:
+        values = {columns[i]: (_clean_cell(row[i]) if i < len(row) else "") for i in range(width)}
+        email_raw = _clean_cell(row[email_i]) if email_i is not None and email_i < len(row) else ""
+        name = _clean_cell(row[name_i]) if name_i is not None and name_i < len(row) else None
+        records.append({"values": values, "email_raw": email_raw, "email": _normalize_email(email_raw), "name": name or None})
+    return columns, records, email_i, name_i
+
+
+@app.post("/api/filter-recipients")
+async def filter_recipients(file: UploadFile = File(...)):
+    filename = (file.filename or "").lower()
+    if not filename.endswith((".csv", ".txt", ".xlsx", ".xlsm")):
+        raise HTTPException(400, "CSV, TXT, XLSX, XLSM 파일만 지원합니다.")
+
+    rows = _table_rows_from_upload(filename, await file.read())
+    columns, records, email_i, _ = _tabular_records(rows)
+    unsubscribed = storage.load_unsubscribed()
+    seen: set[str] = set()
+    kept = []
+    removed_unsubscribed = []
+    removed_duplicate = []
+    removed_invalid = []
+
+    for record in records:
+        email = record["email"]
+        public_record = {"values": record["values"], "email": email, "name": record["name"]}
+        if email_i is None or not _is_valid_email(record["email_raw"]):
+            removed_invalid.append({**public_record, "reason": "invalid_email"})
+            continue
+        if email in seen:
+            removed_duplicate.append({**public_record, "reason": "duplicate"})
+            continue
+        seen.add(email)
+        if email in unsubscribed:
+            removed_unsubscribed.append({**public_record, "reason": "unsubscribed"})
+            continue
+        kept.append(public_record)
+
+    return {
+        "filename": file.filename,
+        "columns": columns,
+        "kept": kept,
+        "removed_unsubscribed": removed_unsubscribed,
+        "removed_duplicate": removed_duplicate,
+        "removed_invalid": removed_invalid,
+        "counts": {
+            "total": len(records),
+            "kept": len(kept),
+            "unsubscribed": len(removed_unsubscribed),
+            "duplicate": len(removed_duplicate),
+            "invalid": len(removed_invalid),
+        },
+    }
 
 
 @app.post("/api/parse-recipients")

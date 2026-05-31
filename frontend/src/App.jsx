@@ -45,6 +45,36 @@ function isPreviewImageUrl(value) {
   return Boolean(url && url !== 'https://...' && (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:image')));
 }
 
+const FILTER_REASON_LABELS = {
+  unsubscribed: '수신거부',
+  duplicate: '중복',
+  invalid_email: '이메일 오류',
+};
+
+function csvEscape(value) {
+  const s = value == null ? '' : String(value);
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+function downloadCsvRecords(records, columns, filename, extraColumns = []) {
+  const header = [...columns, ...extraColumns.map(c => c.label)];
+  const lines = [
+    header,
+    ...records.map(record => [
+      ...columns.map(column => record.values?.[column] ?? ''),
+      ...extraColumns.map(column => column.value(record)),
+    ]),
+  ];
+  const csv = '\ufeff' + lines.map(line => line.map(csvEscape).join(',')).join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function App() {
   const [templates, setTemplates] = useState([]);
   const [senders, setSenders] = useState([]);
@@ -62,6 +92,9 @@ export default function App() {
   const [fromAddr, setFromAddr] = useState('noreply@humancompletion.org');
   const [fromName, setFromName] = useState('전인교육학회');
   const [recipients, setRecipients] = useState([]);
+  const [recipientFilter, setRecipientFilter] = useState(null);
+  const [recipientFiltering, setRecipientFiltering] = useState(false);
+  const [recipientFilterError, setRecipientFilterError] = useState('');
   const [sendStatus, setSendStatus] = useState('');
   const [testEmail, setTestEmail] = useState('');
   const [unsubModal, setUnsubModal] = useState(false);
@@ -312,6 +345,50 @@ export default function App() {
   const onParseRecipients = async (file) => {
     const r = await api.parseRecipients(file);
     setRecipients(r.recipients);
+  };
+
+  const onFilterRecipients = async (file) => {
+    setRecipientFiltering(true);
+    setRecipientFilterError('');
+    try {
+      const r = await api.filterRecipients(file);
+      setRecipientFilter(r);
+    } catch (e) {
+      setRecipientFilter(null);
+      setRecipientFilterError(e.message || '이메일 DB 정리에 실패했습니다.');
+    } finally {
+      setRecipientFiltering(false);
+    }
+  };
+
+  const filterExcluded = () => {
+    if (!recipientFilter) return [];
+    return [
+      ...(recipientFilter.removed_unsubscribed || []).map(r => ({ ...r, reason: 'unsubscribed' })),
+      ...(recipientFilter.removed_duplicate || []).map(r => ({ ...r, reason: 'duplicate' })),
+      ...(recipientFilter.removed_invalid || []).map(r => ({ ...r, reason: 'invalid_email' })),
+    ];
+  };
+
+  const onDownloadFilteredRecipients = () => {
+    const kept = recipientFilter?.kept || [];
+    if (!kept.length) { alert('다운로드할 남은 명단이 없습니다.'); return; }
+    downloadCsvRecords(kept, recipientFilter.columns || [], 'filtered_recipients.csv');
+  };
+
+  const onDownloadExcludedRecipients = () => {
+    const excluded = filterExcluded();
+    if (!excluded.length) { alert('제외된 명단이 없습니다.'); return; }
+    downloadCsvRecords(excluded, recipientFilter.columns || [], 'excluded_recipients.csv', [
+      { label: '제외 사유', value: r => FILTER_REASON_LABELS[r.reason] || r.reason || '' },
+      { label: '판별 이메일', value: r => r.email || '' },
+    ]);
+  };
+
+  const onUseFilteredRecipients = () => {
+    const kept = recipientFilter?.kept || [];
+    if (!kept.length) { alert('수신자로 불러올 남은 명단이 없습니다.'); return; }
+    setRecipients(kept.map(r => ({ email: r.email, name: r.name || null })));
   };
 
   const onSend = async () => {
@@ -717,6 +794,60 @@ export default function App() {
                 />
                 {recipients.length > 0 && (
                   <div className="recipients-pill"><Icon name="check" size={12}/> {recipients.length}명 로드됨</div>
+                )}
+              </div>
+
+              <div className="section">
+                <div className="section-title">이메일 DB 정리</div>
+                <p className="muted" style={{ marginBottom: 8 }}>CSV / Excel DB에서 수신거부, 중복, 오류 이메일을 제외하고 남은 명단만 도출합니다.</p>
+                <Dropzone
+                  onFile={onFilterRecipients}
+                  accept=".csv,.txt,.xlsx,.xlsm"
+                  hint="원본 컬럼을 유지한 채 정리할 CSV 또는 Excel 파일 업로드"
+                  validate={f => /\.(csv|txt|xlsx|xlsm)$/i.test(f.name)}
+                />
+                {recipientFiltering && (
+                  <div className="recipients-pill"><Icon name="download" size={12}/> 정리 중...</div>
+                )}
+                {recipientFilterError && (
+                  <div className="filter-error">{recipientFilterError}</div>
+                )}
+                {recipientFilter && (
+                  <div className="filter-panel">
+                    <div className="filter-stats">
+                      <div className="filter-stat">
+                        <strong>{recipientFilter.counts?.total ?? 0}</strong>
+                        <span>업로드</span>
+                      </div>
+                      <div className="filter-stat is-kept">
+                        <strong>{recipientFilter.counts?.kept ?? 0}</strong>
+                        <span>남은 명단</span>
+                      </div>
+                      <div className="filter-stat">
+                        <strong>{recipientFilter.counts?.unsubscribed ?? 0}</strong>
+                        <span>수신거부 제외</span>
+                      </div>
+                      <div className="filter-stat">
+                        <strong>{recipientFilter.counts?.duplicate ?? 0}</strong>
+                        <span>중복 제외</span>
+                      </div>
+                      <div className="filter-stat">
+                        <strong>{recipientFilter.counts?.invalid ?? 0}</strong>
+                        <span>오류 제외</span>
+                      </div>
+                    </div>
+                    <div className="filter-actions">
+                      <button className="secondary sm" onClick={onDownloadFilteredRecipients}>
+                        <Icon name="download" size={12}/> 남은 명단 CSV 다운로드
+                      </button>
+                      <button className="secondary sm" onClick={onUseFilteredRecipients}>
+                        <Icon name="check" size={12}/> 남은 명단을 수신자로 사용
+                      </button>
+                      <button className="secondary sm" onClick={onDownloadExcludedRecipients}>
+                        <Icon name="drafts" size={12}/> 제외된 명단 CSV 다운로드
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
 
