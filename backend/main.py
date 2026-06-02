@@ -3,6 +3,7 @@ import base64
 import io
 import re
 import secrets
+import zipfile
 from pathlib import Path
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -181,6 +182,8 @@ async def upload_image(file: UploadFile = File(...)):
 
 
 EMAIL_RE = re.compile(r"^[^@\s<>;,]+@[^@\s<>;,]+\.[^@\s<>;,]+$")
+FILTER_INPUT_EXTENSIONS = (".csv", ".txt", ".xlsx", ".xlsm")
+FILTER_ARCHIVE_EXTENSIONS = (".zip",)
 EMAIL_HEADER_KEYS = {
     "email",
     "emailaddress",
@@ -257,6 +260,24 @@ def _table_rows_from_upload(filename: str, content: bytes) -> list[list[str]]:
     return [row for row in rows if any(cell for cell in row)]
 
 
+def _zip_supported_members(content: bytes) -> list[tuple[str, bytes]]:
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(content))
+    except zipfile.BadZipFile:
+        raise HTTPException(400, "ZIP 파일을 읽을 수 없습니다.")
+
+    files: list[tuple[str, bytes]] = []
+    for info in archive.infolist():
+        member_name = info.filename
+        base_name = Path(member_name).name
+        if info.is_dir() or not base_name or base_name.startswith(".") or member_name.startswith("__MACOSX/"):
+            continue
+        if not member_name.lower().endswith(FILTER_INPUT_EXTENSIONS):
+            continue
+        files.append((member_name, archive.read(info)))
+    return files
+
+
 def _header_email_index(row: list[str]) -> int | None:
     for i, value in enumerate(row):
         if _normalize_header(value) in EMAIL_HEADER_KEYS:
@@ -315,15 +336,9 @@ def _tabular_records(rows: list[list[str]]) -> tuple[list[str], list[dict], int 
     return columns, records, email_i, name_i
 
 
-@app.post("/api/filter-recipients")
-async def filter_recipients(file: UploadFile = File(...)):
-    filename = (file.filename or "").lower()
-    if not filename.endswith((".csv", ".txt", ".xlsx", ".xlsm")):
-        raise HTTPException(400, "CSV, TXT, XLSX, XLSM 파일만 지원합니다.")
-
-    rows = _table_rows_from_upload(filename, await file.read())
+def _filter_recipient_bytes(filename: str, content: bytes, unsubscribed: set[str]) -> dict:
+    rows = _table_rows_from_upload(filename.lower(), content)
     columns, records, email_i, _ = _tabular_records(rows)
-    unsubscribed = storage.load_unsubscribed()
     seen: set[str] = set()
     kept = []
     removed_unsubscribed = []
@@ -346,7 +361,7 @@ async def filter_recipients(file: UploadFile = File(...)):
         kept.append(public_record)
 
     return {
-        "filename": file.filename,
+        "filename": filename,
         "columns": columns,
         "kept": kept,
         "removed_unsubscribed": removed_unsubscribed,
@@ -360,6 +375,134 @@ async def filter_recipients(file: UploadFile = File(...)):
             "invalid": len(removed_invalid),
         },
     }
+
+
+def _aggregate_filter_results(files: list[dict]) -> dict:
+    counts = {"total": 0, "kept": 0, "unsubscribed": 0, "duplicate": 0, "invalid": 0}
+    for result in files:
+        for key in counts:
+            counts[key] += result.get("counts", {}).get(key, 0)
+    return {
+        "counts": counts,
+        "kept": [row for result in files for row in result.get("kept", [])],
+        "removed_unsubscribed": [row for result in files for row in result.get("removed_unsubscribed", [])],
+        "removed_duplicate": [row for result in files for row in result.get("removed_duplicate", [])],
+        "removed_invalid": [row for result in files for row in result.get("removed_invalid", [])],
+    }
+
+
+def _filter_upload(filename: str, content: bytes) -> dict:
+    lower = filename.lower()
+    supported = (*FILTER_INPUT_EXTENSIONS, *FILTER_ARCHIVE_EXTENSIONS)
+    if not lower.endswith(supported):
+        raise HTTPException(400, "지원 포맷: CSV, TXT, Excel(.xlsx/.xlsm), ZIP")
+
+    unsubscribed = storage.load_unsubscribed()
+    if lower.endswith(FILTER_ARCHIVE_EXTENSIONS):
+        members = _zip_supported_members(content)
+        if not members:
+            raise HTTPException(400, "ZIP 내부에 지원되는 CSV, TXT, Excel(.xlsx/.xlsm) 파일이 없습니다.")
+        files = [_filter_recipient_bytes(name, member_content, unsubscribed) for name, member_content in members]
+        aggregate = _aggregate_filter_results(files)
+        return {
+            "filename": filename,
+            "is_zip": True,
+            "file_count": len(files),
+            "files": files,
+            "columns": files[0]["columns"] if files else [],
+            **aggregate,
+        }
+
+    result = _filter_recipient_bytes(filename, content, unsubscribed)
+    return {
+        "filename": filename,
+        "is_zip": False,
+        "file_count": 1,
+        "files": [result],
+        **result,
+    }
+
+
+def _csv_bytes_for_filter_result(result: dict, kind: str) -> bytes:
+    columns = result.get("columns", [])
+    if kind == "kept":
+        header = columns
+        records = result.get("kept", [])
+        rows = [[record.get("values", {}).get(column, "") for column in columns] for record in records]
+    else:
+        header = [*columns, "제외 사유", "판별 이메일"]
+        reason_groups = [
+            ("수신거부", result.get("removed_unsubscribed", [])),
+            ("중복", result.get("removed_duplicate", [])),
+            ("이메일 오류", result.get("removed_invalid", [])),
+        ]
+        rows = []
+        for label, records in reason_groups:
+            for record in records:
+                rows.append([
+                    *[record.get("values", {}).get(column, "") for column in columns],
+                    label,
+                    record.get("email", ""),
+                ])
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(header)
+    writer.writerows(rows)
+    return ("\ufeff" + output.getvalue()).encode("utf-8")
+
+
+def _safe_csv_name(filename: str, suffix: str) -> str:
+    stem = Path(filename).stem or "recipients"
+    stem = re.sub(r"[^\w가-힣.-]+", "_", stem).strip("._") or "recipients"
+    return f"{stem}_{suffix}.csv"
+
+
+def _unique_zip_csv_name(filename: str, suffix: str, used_names: set[str]) -> str:
+    candidate = _safe_csv_name(filename, suffix)
+    if candidate not in used_names:
+        used_names.add(candidate)
+        return candidate
+    stem = Path(candidate).stem
+    ext = Path(candidate).suffix
+    index = 2
+    while True:
+        indexed = f"{stem}_{index}{ext}"
+        if indexed not in used_names:
+            used_names.add(indexed)
+            return indexed
+        index += 1
+
+
+@app.post("/api/filter-recipients")
+async def filter_recipients(file: UploadFile = File(...)):
+    return _filter_upload(file.filename or "recipients", await file.read())
+
+
+@app.post("/api/filter-recipients/export")
+async def export_filtered_recipients(file: UploadFile = File(...), kind: str = Form("kept")):
+    if kind not in {"kept", "excluded"}:
+        raise HTTPException(400, "kind는 kept 또는 excluded만 지원합니다.")
+
+    result = _filter_upload(file.filename or "recipients", await file.read())
+    suffix = "filtered" if kind == "kept" else "excluded"
+    if result["is_zip"]:
+        buffer = io.BytesIO()
+        used_names: set[str] = set()
+        with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            for file_result in result["files"]:
+                archive.writestr(_unique_zip_csv_name(file_result["filename"], suffix, used_names), _csv_bytes_for_filter_result(file_result, kind))
+        return Response(
+            content=buffer.getvalue(),
+            media_type="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="unsubscribe_{suffix}_files.zip"'},
+        )
+
+    return Response(
+        content=_csv_bytes_for_filter_result(result["files"][0], kind),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="unsubscribe_{suffix}_recipients.csv"'},
+    )
 
 
 @app.post("/api/parse-recipients")

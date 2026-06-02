@@ -45,28 +45,7 @@ function isPreviewImageUrl(value) {
   return Boolean(url && url !== 'https://...' && (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:image')));
 }
 
-const FILTER_REASON_LABELS = {
-  unsubscribed: '수신거부',
-  duplicate: '중복',
-  invalid_email: '이메일 오류',
-};
-
-function csvEscape(value) {
-  const s = value == null ? '' : String(value);
-  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
-
-function downloadCsvRecords(records, columns, filename, extraColumns = []) {
-  const header = [...columns, ...extraColumns.map(c => c.label)];
-  const lines = [
-    header,
-    ...records.map(record => [
-      ...columns.map(column => record.values?.[column] ?? ''),
-      ...extraColumns.map(column => column.value(record)),
-    ]),
-  ];
-  const csv = '\ufeff' + lines.map(line => line.map(csvEscape).join(',')).join('\r\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -93,6 +72,7 @@ export default function App() {
   const [fromName, setFromName] = useState('전인교육학회');
   const [recipients, setRecipients] = useState([]);
   const [recipientFilter, setRecipientFilter] = useState(null);
+  const [recipientFilterFile, setRecipientFilterFile] = useState(null);
   const [recipientFiltering, setRecipientFiltering] = useState(false);
   const [recipientFilterError, setRecipientFilterError] = useState('');
   const [sendStatus, setSendStatus] = useState('');
@@ -350,11 +330,13 @@ export default function App() {
   const onFilterRecipients = async (file) => {
     setRecipientFiltering(true);
     setRecipientFilterError('');
+    setRecipientFilterFile(file);
     try {
       const r = await api.filterRecipients(file);
       setRecipientFilter(r);
     } catch (e) {
       setRecipientFilter(null);
+      setRecipientFilterFile(null);
       setRecipientFilterError(e.message || '이메일 수신거부 정리에 실패했습니다.');
     } finally {
       setRecipientFiltering(false);
@@ -370,24 +352,33 @@ export default function App() {
     ];
   };
 
-  const onDownloadFilteredRecipients = () => {
+  const onDownloadFilteredRecipients = async () => {
     const kept = recipientFilter?.kept || [];
     if (!kept.length) { alert('다운로드할 정리된 명단이 없습니다.'); return; }
-    downloadCsvRecords(kept, recipientFilter.columns || [], 'unsubscribe_filtered_recipients.csv');
+    if (!recipientFilterFile) { alert('다시 업로드한 뒤 다운로드해 주세요.'); return; }
+    try {
+      const blob = await api.exportFilteredRecipients(recipientFilterFile, 'kept');
+      downloadBlob(blob, recipientFilter?.is_zip ? 'unsubscribe_filtered_files.zip' : 'unsubscribe_filtered_recipients.csv');
+    } catch (e) {
+      alert('다운로드 실패: ' + e.message);
+    }
   };
 
-  const onDownloadExcludedRecipients = () => {
+  const onDownloadExcludedRecipients = async () => {
     const excluded = filterExcluded();
     if (!excluded.length) { alert('제외된 명단이 없습니다.'); return; }
-    downloadCsvRecords(excluded, recipientFilter.columns || [], 'unsubscribe_filter_excluded.csv', [
-      { label: '제외 사유', value: r => FILTER_REASON_LABELS[r.reason] || r.reason || '' },
-      { label: '판별 이메일', value: r => r.email || '' },
-    ]);
+    if (!recipientFilterFile) { alert('다시 업로드한 뒤 다운로드해 주세요.'); return; }
+    try {
+      const blob = await api.exportFilteredRecipients(recipientFilterFile, 'excluded');
+      downloadBlob(blob, recipientFilter?.is_zip ? 'unsubscribe_excluded_files.zip' : 'unsubscribe_excluded_recipients.csv');
+    } catch (e) {
+      alert('다운로드 실패: ' + e.message);
+    }
   };
 
   const onUseFilteredRecipients = () => {
     const kept = recipientFilter?.kept || [];
-    if (!kept.length) { alert('수신자로 불러올 남은 명단이 없습니다.'); return; }
+    if (!kept.length) { alert('수신자로 불러올 정리된 명단이 없습니다.'); return; }
     setRecipients(kept.map(r => ({ email: r.email, name: r.name || null })));
   };
 
@@ -785,7 +776,7 @@ export default function App() {
 
               <div className="section">
                 <div className="section-title">수신자 명단</div>
-                <p className="muted" style={{ marginBottom: 8 }}>컬럼: <code>email</code> 또는 <code>email,name</code> · CSV / Excel(.xlsx) 지원</p>
+                <p className="muted" style={{ marginBottom: 8 }}>지원 포맷: CSV, TXT, Excel(.xlsx/.xlsm)</p>
                 <Dropzone
                   onFile={onParseRecipients}
                   accept=".csv,.txt,.xlsx,.xlsm"
@@ -799,12 +790,12 @@ export default function App() {
 
               <div className="section">
                 <div className="section-title">이메일 수신거부 정리</div>
-                <p className="muted" style={{ marginBottom: 8 }}>CSV / Excel 이메일 명단에서 수신거부, 중복, 오류 이메일을 제외하고 정리된 명단만 도출합니다.</p>
+                <p className="muted" style={{ marginBottom: 8 }}>지원 포맷: CSV, TXT, Excel(.xlsx/.xlsm), ZIP</p>
                 <Dropzone
                   onFile={onFilterRecipients}
-                  accept=".csv,.txt,.xlsx,.xlsm"
-                  hint="원본 컬럼을 유지한 채 수신거부 정리할 CSV 또는 Excel 파일 업로드"
-                  validate={f => /\.(csv|txt|xlsx|xlsm)$/i.test(f.name)}
+                  accept=".csv,.txt,.xlsx,.xlsm,.zip"
+                  hint="수신거부, 중복, 오류 이메일을 제외할 파일 업로드"
+                  validate={f => /\.(csv|txt|xlsx|xlsm|zip)$/i.test(f.name)}
                 />
                 {recipientFiltering && (
                   <div className="recipients-pill"><Icon name="download" size={12}/> 정리 중...</div>
@@ -814,6 +805,9 @@ export default function App() {
                 )}
                 {recipientFilter && (
                   <div className="filter-panel">
+                    {recipientFilter.is_zip && (
+                      <div className="filter-file-note"><Icon name="drafts" size={12}/> ZIP 내부 {recipientFilter.file_count || 0}개 파일을 개별 정리했습니다.</div>
+                    )}
                     <div className="filter-stats">
                       <div className="filter-stat">
                         <strong>{recipientFilter.counts?.total ?? 0}</strong>
@@ -838,13 +832,13 @@ export default function App() {
                     </div>
                     <div className="filter-actions">
                       <button className="secondary sm" onClick={onDownloadFilteredRecipients}>
-                        <Icon name="download" size={12}/> 정리된 명단 CSV 다운로드
+                        <Icon name="download" size={12}/> {recipientFilter.is_zip ? '정리된 파일 ZIP 다운로드' : '정리된 명단 CSV 다운로드'}
                       </button>
                       <button className="secondary sm" onClick={onUseFilteredRecipients}>
                         <Icon name="check" size={12}/> 정리된 명단을 수신자로 사용
                       </button>
                       <button className="secondary sm" onClick={onDownloadExcludedRecipients}>
-                        <Icon name="drafts" size={12}/> 제외 명단 CSV 다운로드
+                        <Icon name="drafts" size={12}/> {recipientFilter.is_zip ? '제외 파일 ZIP 다운로드' : '제외 명단 CSV 다운로드'}
                       </button>
                     </div>
                   </div>

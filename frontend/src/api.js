@@ -30,6 +30,10 @@ export const api = {
     const fd = new FormData(); fd.append('file', file);
     return fetch('/api/filter-recipients', { method: 'POST', body: fd }).then(J);
   },
+  exportFilteredRecipients: (file, kind = 'kept') => {
+    const fd = new FormData(); fd.append('file', file); fd.append('kind', kind);
+    return fetch('/api/filter-recipients/export', { method: 'POST', body: fd }).then(r => r.ok ? r.blob() : r.text().then(t => Promise.reject(new Error(t))));
+  },
   send: (payload) => fetch('/api/send', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),

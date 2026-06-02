@@ -880,6 +880,19 @@ button.icon-only { padding: 8px; width: 34px; height: 34px; }
   background: var(--surface);
   padding: 12px;
 }
+.filter-file-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--brand-100);
+  border-radius: var(--r);
+  background: var(--brand-50);
+  color: var(--brand);
+  font-size: 12px;
+  font-weight: 700;
+}
 .filter-stats {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
