@@ -1088,13 +1088,20 @@ def get_manual():
 
 @app.get("/health")
 def health():
-    return {
+    status = {
         "ok": True,
         "app_env": config.APP_ENV,
         "vercel_runtime": config.RUNNING_ON_VERCEL,
         "requires_supabase": config.REQUIRE_SUPABASE,
         "storage": "supabase" if storage.using_supabase() else "local",
     }
+    try:
+        status["unsubscribed_access"] = "ok"
+        status["unsubscribed_count"] = len(storage.load_unsubscribed())
+    except Exception as exc:
+        status["unsubscribed_access"] = "error"
+        status["unsubscribed_error"] = str(exc)
+    return status
 
 
 @app.get("/{full_path:path}", include_in_schema=False)
