@@ -1,22 +1,16 @@
+from __future__ import annotations
+
 import csv
 import io
 import json
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from . import config
-
-try:
-    from supabase import create_client
-except Exception:  # pragma: no cover - local fallback when dependency is absent
-    create_client = None
-
-
-_client = None
+from . import config, supabase_rest
 
 
 def using_supabase() -> bool:
-    return bool(config.USE_SUPABASE and create_client)
+    return bool(config.USE_SUPABASE)
 
 
 def _require_storage_backend():
@@ -27,19 +21,8 @@ def _require_storage_backend():
         missing.append("SUPABASE_URL")
     if not config.SUPABASE_SERVICE_ROLE_KEY:
         missing.append("SUPABASE_SERVICE_ROLE_KEY")
-    if create_client is None:
-        missing.append("supabase Python package")
-    detail = ", ".join(missing) if missing else "Supabase client initialization"
+    detail = ", ".join(missing) if missing else "Supabase REST configuration"
     raise RuntimeError(f"운영 환경에서는 Supabase 설정이 필요합니다. 확인 항목: {detail}")
-
-
-def client():
-    global _client
-    if not using_supabase():
-        raise RuntimeError("Supabase is not configured")
-    if _client is None:
-        _client = create_client(config.SUPABASE_URL, config.SUPABASE_SERVICE_ROLE_KEY)
-    return _client
 
 
 # ========== Local development fallback ==========
@@ -172,7 +155,7 @@ def _load_sample_draft() -> dict | None:
 
 
 def _supabase_draft_exists(draft_id: str) -> bool:
-    rows = client().table("drafts").select("id").eq("id", draft_id).limit(1).execute().data or []
+    rows = supabase_rest.select("drafts", "id", {"id": f"eq.{draft_id}"}, limit=1)
     return bool(rows)
 
 
@@ -188,7 +171,7 @@ def _draft_has_meaningful_content(draft: dict | None) -> bool:
 
 
 def _get_supabase_draft_row(draft_id: str) -> dict | None:
-    rows = client().table("drafts").select("*").eq("id", draft_id).limit(1).execute().data or []
+    rows = supabase_rest.select("drafts", "*", {"id": f"eq.{draft_id}"}, limit=1)
     return rows[0] if rows else None
 
 
@@ -210,21 +193,21 @@ def _ensure_sample_draft() -> None:
 
     sample_row = _get_supabase_draft_row(sample_id)
     if not _draft_has_meaningful_content(sample_row):
-        client().table("drafts").upsert(payload).execute()
+        supabase_rest.upsert("drafts", payload, on_conflict="id")
 
-    rows = client().table("app_settings").select("value").eq("key", "default_draft_id").limit(1).execute().data or []
+    rows = supabase_rest.select("app_settings", "value", {"key": "eq.default_draft_id"}, limit=1)
     default_value = rows[0].get("value") if rows else None
     default_id = default_value.get("id") if isinstance(default_value, dict) else None
     default_row = _get_supabase_draft_row(default_id) if default_id else None
     if not _draft_has_meaningful_content(default_row):
-        client().table("app_settings").upsert({"key": "default_draft_id", "value": {"id": payload["id"]}}).execute()
+        supabase_rest.upsert("app_settings", {"key": "default_draft_id", "value": {"id": payload["id"]}}, on_conflict="key")
 
 
 def list_drafts() -> list[dict]:
     if not using_supabase():
         return _local_list_drafts()
     _ensure_sample_draft()
-    rows = client().table("drafts").select("id,name,template").order("updated_at", desc=True).execute().data or []
+    rows = supabase_rest.select("drafts", "id,name,template", order="updated_at.desc")
     return [{"id": r["id"], "name": r.get("name") or r["id"], "template": r.get("template") or "classic"} for r in rows]
 
 
@@ -232,7 +215,7 @@ def get_draft(draft_id: str) -> dict | None:
     if not using_supabase():
         return _local_get_draft(draft_id)
     _ensure_sample_draft()
-    rows = client().table("drafts").select("*").eq("id", draft_id).limit(1).execute().data or []
+    rows = supabase_rest.select("drafts", "*", {"id": f"eq.{draft_id}"}, limit=1)
     return _draft_from_row(rows[0]) if rows else None
 
 
@@ -256,7 +239,7 @@ def save_draft(draft: dict) -> dict:
         "data": draft.get("data") or {},
         "updated_at": _utc_now(),
     }
-    client().table("drafts").upsert(payload).execute()
+    supabase_rest.upsert("drafts", payload, on_conflict="id")
     return _draft_from_row(payload)
 
 
@@ -264,14 +247,14 @@ def rename_draft(draft_id: str, new_name: str) -> dict | None:
     if not using_supabase():
         return _local_rename_draft(draft_id, new_name)
     payload = {"name": new_name.strip() or "untitled", "updated_at": _utc_now()}
-    rows = client().table("drafts").update(payload).eq("id", draft_id).execute().data or []
+    rows = supabase_rest.update("drafts", payload, {"id": f"eq.{draft_id}"}, returning=True)
     return get_draft(draft_id) if rows else None
 
 
 def delete_draft(draft_id: str) -> bool:
     if not using_supabase():
         return _local_delete_draft(draft_id)
-    client().table("drafts").delete().eq("id", draft_id).execute()
+    supabase_rest.delete("drafts", {"id": f"eq.{draft_id}"})
     return True
 
 
@@ -279,7 +262,7 @@ def get_default_draft_id() -> str | None:
     if not using_supabase():
         return _local_get_default_draft_id()
     _ensure_sample_draft()
-    rows = client().table("app_settings").select("value").eq("key", "default_draft_id").limit(1).execute().data or []
+    rows = supabase_rest.select("app_settings", "value", {"key": "eq.default_draft_id"}, limit=1)
     if not rows:
         return None
     value = rows[0].get("value")
@@ -292,7 +275,7 @@ def set_default_draft_id(draft_id: str | None) -> bool:
     if draft_id is not None and not get_draft(draft_id):
         return False
     payload = {"key": "default_draft_id", "value": {"id": draft_id} if draft_id else None}
-    client().table("app_settings").upsert(payload).execute()
+    supabase_rest.upsert("app_settings", payload, on_conflict="key")
     return True
 
 
@@ -304,7 +287,7 @@ def load_unsubscribed() -> set[str]:
         if not UNSUB.exists():
             return set()
         return {line.strip().lower() for line in UNSUB.read_text(encoding="utf-8").splitlines() if line.strip()}
-    rows = client().table("unsubscribed").select("email").execute().data or []
+    rows = supabase_rest.select("unsubscribed", "email")
     return {r["email"].strip().lower() for r in rows if r.get("email")}
 
 
@@ -322,7 +305,7 @@ def add_unsubscribed(email: str) -> bool:
             f.write(email + "\n")
         return True
     try:
-        client().table("unsubscribed").insert({"email": email}).execute()
+        supabase_rest.insert("unsubscribed", {"email": email})
         return True
     except Exception as exc:
         message = str(exc).lower()
@@ -340,7 +323,7 @@ def remove_unsubscribed(email: str) -> bool:
         lines = [l for l in UNSUB.read_text(encoding="utf-8").splitlines() if l.strip().lower() != email]
         UNSUB.write_text(("\n".join(lines) + "\n") if lines else "", encoding="utf-8")
         return True
-    client().table("unsubscribed").delete().eq("email", email).execute()
+    supabase_rest.delete("unsubscribed", {"email": f"eq.{email}"})
     return True
 
 
@@ -352,15 +335,7 @@ def export_unsubscribed_csv() -> str:
     if not using_supabase():
         writer.writerows({"email": email, "unsubscribed_at": ""} for email in sorted(load_unsubscribed()))
         return buf.getvalue()
-    rows = (
-        client()
-        .table("unsubscribed")
-        .select("email,unsubscribed_at")
-        .order("unsubscribed_at", desc=True)
-        .execute()
-        .data
-        or []
-    )
+    rows = supabase_rest.select("unsubscribed", "email,unsubscribed_at", order="unsubscribed_at.desc")
     writer.writerows(rows)
     return buf.getvalue()
 
@@ -383,7 +358,7 @@ def load_subscribers() -> list[dict]:
             if row.get("email"):
                 rows.append({k: (row.get(k) or "").strip() for k in _SUBS_HEADER})
         return rows
-    rows = client().table("subscribers").select("*").execute().data or []
+    rows = supabase_rest.select("subscribers", "*")
     rows.sort(key=lambda row: row.get("subscribed_at") or row.get("created_at") or "", reverse=True)
     return [
         {
@@ -442,7 +417,7 @@ def add_subscriber(
     optional_fields = ["organization", "consent_source", "consent_version", "ip", "user_agent"]
     while True:
         try:
-            client().table("subscribers").insert(payload).execute()
+            supabase_rest.insert("subscribers", payload)
             break
         except Exception as exc:
             message = str(exc).lower()
@@ -468,7 +443,7 @@ def remove_subscriber(email: str) -> bool:
             writer.writeheader()
             writer.writerows(rows)
         return True
-    client().table("subscribers").delete().eq("email", email).execute()
+    supabase_rest.delete("subscribers", {"email": f"eq.{email}"})
     return True
 
 

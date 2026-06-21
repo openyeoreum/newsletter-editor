@@ -15,7 +15,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
 
-from . import storage
+from . import storage, supabase_rest
 from .senders.base import Recipient
 
 
@@ -76,10 +76,6 @@ def _summary_message(job: dict) -> str:
 
 # ========== Supabase implementation ==========
 
-def _db():
-    return storage.client()
-
-
 def _sb_create_job(payload: dict, recipients: list[Recipient], skipped: int, batch_size: int) -> dict:
     job_id = uuid.uuid4().hex[:12]
     total = len(recipients)
@@ -102,7 +98,7 @@ def _sb_create_job(payload: dict, recipients: list[Recipient], skipped: int, bat
         "errors": [],
         "message": "발송 대기 중",
     }
-    _db().table("send_jobs").insert(job_payload).execute()
+    supabase_rest.insert("send_jobs", job_payload)
     rows = [
         {
             "job_id": job_id,
@@ -113,46 +109,32 @@ def _sb_create_job(payload: dict, recipients: list[Recipient], skipped: int, bat
         for r in recipients
     ]
     if rows:
-        _db().table("send_job_recipients").insert(rows).execute()
+        supabase_rest.insert("send_job_recipients", rows)
     return _job_from_row({**job_payload, "started_at": _now_iso(), "finished_at": None})
 
 
 def _sb_get_job(job_id: str) -> dict | None:
-    rows = _db().table("send_jobs").select("*").eq("id", job_id).limit(1).execute().data or []
+    rows = supabase_rest.select("send_jobs", "*", {"id": f"eq.{job_id}"}, limit=1)
     return _job_from_row(rows[0]) if rows else None
 
 
 def _sb_list_jobs(limit: int = 20) -> list[dict]:
-    rows = (
-        _db()
-        .table("send_jobs")
-        .select("*")
-        .order("started_at", desc=True)
-        .limit(limit)
-        .execute()
-        .data
-        or []
-    )
+    rows = supabase_rest.select("send_jobs", "*", order="started_at.desc", limit=limit)
     return [_job_from_row(row) for row in rows]
 
 
 def _sb_set_running(job_id: str) -> dict | None:
-    _db().table("send_jobs").update({"status": "running"}).eq("id", job_id).execute()
+    supabase_rest.update("send_jobs", {"status": "running"}, {"id": f"eq.{job_id}"})
     return _sb_get_job(job_id)
 
 
 def _sb_pending_recipients(job_id: str, limit: int) -> list[dict]:
-    rows = (
-        _db()
-        .table("send_job_recipients")
-        .select("id,email,name")
-        .eq("job_id", job_id)
-        .eq("status", "pending")
-        .order("created_at")
-        .limit(limit)
-        .execute()
-        .data
-        or []
+    rows = supabase_rest.select(
+        "send_job_recipients",
+        "id,email,name",
+        {"job_id": f"eq.{job_id}", "status": "eq.pending"},
+        order="created_at.asc",
+        limit=limit,
     )
     return rows
 
@@ -160,11 +142,17 @@ def _sb_pending_recipients(job_id: str, limit: int) -> list[dict]:
 def _sb_mark_batch_result(job_id: str, sent_ids: list[str], failed_rows: list[dict]) -> dict:
     now = _now_iso()
     if sent_ids:
-        _db().table("send_job_recipients").update({"status": "sent", "processed_at": now}).in_("id", sent_ids).execute()
+        supabase_rest.update(
+            "send_job_recipients",
+            {"status": "sent", "processed_at": now},
+            {"id": f"in.({','.join(str(i) for i in sent_ids)})"},
+        )
     for row in failed_rows:
-        _db().table("send_job_recipients").update(
-            {"status": "failed", "error": row.get("error") or "발송 실패", "processed_at": now}
-        ).eq("id", row["id"]).execute()
+        supabase_rest.update(
+            "send_job_recipients",
+            {"status": "failed", "error": row.get("error") or "발송 실패", "processed_at": now},
+            {"id": f"eq.{row['id']}"},
+        )
 
     job = _sb_get_job(job_id)
     if not job:
@@ -187,7 +175,7 @@ def _sb_mark_batch_result(job_id: str, sent_ids: list[str], failed_rows: list[di
     if done:
         payload["finished_at"] = now
         payload["message"] = _summary_message({**job, "sent": sent, "failed": failed})
-    _db().table("send_jobs").update(payload).eq("id", job_id).execute()
+    supabase_rest.update("send_jobs", payload, {"id": f"eq.{job_id}"})
     return _sb_get_job(job_id)
 
 
@@ -199,7 +187,7 @@ def _sb_finish_if_complete(job_id: str) -> dict | None:
         return job
     if job["sent"] + job["failed"] >= job["total"]:
         payload = {"status": "done", "finished_at": _now_iso(), "message": _summary_message(job)}
-        _db().table("send_jobs").update(payload).eq("id", job_id).execute()
+        supabase_rest.update("send_jobs", payload, {"id": f"eq.{job_id}"})
         return _sb_get_job(job_id)
     return job
 
@@ -219,7 +207,7 @@ def _sb_fail_job(job_id: str, message: str, errors: list[str] | None = None) -> 
         "message": message,
         "errors": existing[:50],
     }
-    _db().table("send_jobs").update(payload).eq("id", job_id).execute()
+    supabase_rest.update("send_jobs", payload, {"id": f"eq.{job_id}"})
     return _sb_get_job(job_id)
 
 
