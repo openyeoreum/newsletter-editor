@@ -17,7 +17,17 @@ def _default_path(env_name: str, local_path: str, docker_path: str) -> str:
     return docker_path
 
 APP_ENV = os.getenv("APP_ENV", "development").lower()
-RUNNING_ON_VERCEL = bool(os.getenv("VERCEL"))
+RUNNING_ON_VERCEL = any(
+    bool(os.getenv(name))
+    for name in (
+        "VERCEL",
+        "VERCEL_ENV",
+        "VERCEL_URL",
+        "VERCEL_REGION",
+        "AWS_LAMBDA_FUNCTION_NAME",
+        "LAMBDA_TASK_ROOT",
+    )
+)
 FRONTEND_DIST_DIR = _default_path("FRONTEND_DIST_DIR", "frontend/dist", "/app/frontend/dist")
 
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")

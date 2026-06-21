@@ -1088,7 +1088,13 @@ def get_manual():
 
 @app.get("/health")
 def health():
-    return {"ok": True}
+    return {
+        "ok": True,
+        "app_env": config.APP_ENV,
+        "vercel_runtime": config.RUNNING_ON_VERCEL,
+        "requires_supabase": config.REQUIRE_SUPABASE,
+        "storage": "supabase" if storage.using_supabase() else "local",
+    }
 
 
 @app.get("/{full_path:path}", include_in_schema=False)
