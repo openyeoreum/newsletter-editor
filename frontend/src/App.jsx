@@ -344,12 +344,8 @@ export default function App() {
   };
 
   const filterExcluded = () => {
-    if (!recipientFilter) return [];
-    return [
-      ...(recipientFilter.removed_unsubscribed || []).map(r => ({ ...r, reason: 'unsubscribed' })),
-      ...(recipientFilter.removed_duplicate || []).map(r => ({ ...r, reason: 'duplicate' })),
-      ...(recipientFilter.removed_invalid || []).map(r => ({ ...r, reason: 'invalid_email' })),
-    ];
+    const counts = recipientFilter?.counts || {};
+    return (counts.unsubscribed || 0) + (counts.duplicate || 0) + (counts.invalid || 0);
   };
 
   const onDownloadFilteredRecipients = async () => {
@@ -365,8 +361,7 @@ export default function App() {
   };
 
   const onDownloadExcludedRecipients = async () => {
-    const excluded = filterExcluded();
-    if (!excluded.length) { alert('제외된 명단이 없습니다.'); return; }
+    if (!filterExcluded()) { alert('제외된 명단이 없습니다.'); return; }
     if (!recipientFilterFile) { alert('다시 업로드한 뒤 다운로드해 주세요.'); return; }
     try {
       const blob = await api.exportFilteredRecipients(recipientFilterFile, 'excluded');
@@ -378,6 +373,10 @@ export default function App() {
 
   const onUseFilteredRecipients = () => {
     const kept = recipientFilter?.kept || [];
+    if (recipientFilter && !recipientFilter.can_use_as_recipients) {
+      alert(`수신자 불러오기는 ${recipientFilter.recipient_limit?.toLocaleString() || ''}건 이하에서만 가능합니다. 정리된 파일을 다운로드해서 사용해 주세요.`);
+      return;
+    }
     if (!kept.length) { alert('수신자로 불러올 정리된 명단이 없습니다.'); return; }
     setRecipients(kept.map(r => ({ email: r.email, name: r.name || null })));
   };
@@ -807,6 +806,12 @@ export default function App() {
                   <div className="filter-panel">
                     {recipientFilter.is_zip && (
                       <div className="filter-file-note"><Icon name="drafts" size={12}/> ZIP 내부 {recipientFilter.file_count || 0}개 파일을 개별 정리했습니다.</div>
+                    )}
+                    {recipientFilter.error_count > 0 && (
+                      <div className="filter-file-note warning"><Icon name="drafts" size={12}/> {recipientFilter.error_count}개 파일은 처리하지 못했습니다. 제외 파일 ZIP에 오류 목록이 포함됩니다.</div>
+                    )}
+                    {recipientFilter.kept_truncated && (
+                      <div className="filter-file-note warning"><Icon name="drafts" size={12}/> 명단이 커서 화면에는 일부만 불러왔습니다. 전체 결과는 다운로드 파일에 포함됩니다.</div>
                     )}
                     <div className="filter-stats">
                       <div className="filter-stat">

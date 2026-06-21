@@ -893,6 +893,11 @@ button.icon-only { padding: 8px; width: 34px; height: 34px; }
   font-size: 12px;
   font-weight: 700;
 }
+.filter-file-note.warning {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #92400e;
+}
 .filter-stats {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));

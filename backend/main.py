@@ -184,6 +184,7 @@ async def upload_image(file: UploadFile = File(...)):
 EMAIL_RE = re.compile(r"^[^@\s<>;,]+@[^@\s<>;,]+\.[^@\s<>;,]+$")
 FILTER_INPUT_EXTENSIONS = (".csv", ".txt", ".xlsx", ".xlsm")
 FILTER_ARCHIVE_EXTENSIONS = (".zip",)
+FILTER_RESPONSE_RECIPIENT_LIMIT = 50000
 EMAIL_HEADER_KEYS = {
     "email",
     "emailaddress",
@@ -402,12 +403,25 @@ def _filter_upload(filename: str, content: bytes) -> dict:
         members = _zip_supported_members(content)
         if not members:
             raise HTTPException(400, "ZIP 내부에 지원되는 CSV, TXT, Excel(.xlsx/.xlsm) 파일이 없습니다.")
-        files = [_filter_recipient_bytes(name, member_content, unsubscribed) for name, member_content in members]
+        files = []
+        errors = []
+        for name, member_content in members:
+            try:
+                files.append(_filter_recipient_bytes(name, member_content, unsubscribed))
+            except HTTPException as exc:
+                errors.append({"filename": name, "detail": exc.detail})
+            except Exception as exc:
+                errors.append({"filename": name, "detail": str(exc)})
+        if not files:
+            first_error = errors[0]["detail"] if errors else "처리 가능한 파일이 없습니다."
+            raise HTTPException(400, f"ZIP 내부 파일 처리 실패: {first_error}")
         aggregate = _aggregate_filter_results(files)
         return {
             "filename": filename,
             "is_zip": True,
             "file_count": len(files),
+            "error_count": len(errors),
+            "errors": errors,
             "files": files,
             "columns": files[0]["columns"] if files else [],
             **aggregate,
@@ -418,8 +432,37 @@ def _filter_upload(filename: str, content: bytes) -> dict:
         "filename": filename,
         "is_zip": False,
         "file_count": 1,
+        "error_count": 0,
+        "errors": [],
         "files": [result],
         **result,
+    }
+
+
+def _compact_filter_result(result: dict) -> dict:
+    kept = result.get("kept", [])
+    kept_for_response = kept[:FILTER_RESPONSE_RECIPIENT_LIMIT]
+    kept_truncated = len(kept) > len(kept_for_response)
+    return {
+        "filename": result.get("filename"),
+        "is_zip": result.get("is_zip", False),
+        "file_count": result.get("file_count", 1),
+        "error_count": result.get("error_count", 0),
+        "errors": result.get("errors", []),
+        "columns": result.get("columns", []),
+        "counts": result.get("counts", {}),
+        "kept": [{"email": row.get("email"), "name": row.get("name")} for row in kept_for_response],
+        "kept_truncated": kept_truncated,
+        "recipient_limit": FILTER_RESPONSE_RECIPIENT_LIMIT,
+        "can_use_as_recipients": not kept_truncated,
+        "files": [
+            {
+                "filename": file_result.get("filename"),
+                "columns": file_result.get("columns", []),
+                "counts": file_result.get("counts", {}),
+            }
+            for file_result in result.get("files", [])
+        ],
     }
 
 
@@ -476,7 +519,7 @@ def _unique_zip_csv_name(filename: str, suffix: str, used_names: set[str]) -> st
 
 @app.post("/api/filter-recipients")
 async def filter_recipients(file: UploadFile = File(...)):
-    return _filter_upload(file.filename or "recipients", await file.read())
+    return _compact_filter_result(_filter_upload(file.filename or "recipients", await file.read()))
 
 
 @app.post("/api/filter-recipients/export")
@@ -492,6 +535,13 @@ async def export_filtered_recipients(file: UploadFile = File(...), kind: str = F
         with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
             for file_result in result["files"]:
                 archive.writestr(_unique_zip_csv_name(file_result["filename"], suffix, used_names), _csv_bytes_for_filter_result(file_result, kind))
+            if result.get("errors"):
+                output = io.StringIO()
+                writer = csv.writer(output)
+                writer.writerow(["파일명", "오류"])
+                for error in result["errors"]:
+                    writer.writerow([error.get("filename", ""), error.get("detail", "")])
+                archive.writestr("_processing_errors.csv", ("\ufeff" + output.getvalue()).encode("utf-8"))
         return Response(
             content=buffer.getvalue(),
             media_type="application/zip",
