@@ -1088,13 +1088,26 @@ def get_manual():
 
 @app.get("/health")
 def health():
+    import socket
+    from urllib.parse import urlparse
+
+    supabase_host = urlparse(config.SUPABASE_URL).hostname or ""
     status = {
         "ok": True,
         "app_env": config.APP_ENV,
         "vercel_runtime": config.RUNNING_ON_VERCEL,
         "requires_supabase": config.REQUIRE_SUPABASE,
         "storage": "supabase" if storage.using_supabase() else "local",
+        "supabase_host": supabase_host,
     }
+    if supabase_host:
+        try:
+            addresses = socket.getaddrinfo(supabase_host, 443, type=socket.SOCK_STREAM)
+            status["supabase_dns"] = "ok"
+            status["supabase_dns_count"] = len(addresses)
+        except Exception as exc:
+            status["supabase_dns"] = "error"
+            status["supabase_dns_error"] = str(exc)
     try:
         status["unsubscribed_access"] = "ok"
         status["unsubscribed_count"] = len(storage.load_unsubscribed())
