@@ -17,6 +17,7 @@ def _default_path(env_name: str, local_path: str, docker_path: str) -> str:
     return docker_path
 
 APP_ENV = os.getenv("APP_ENV", "development").lower()
+RUNNING_ON_VERCEL = bool(os.getenv("VERCEL"))
 FRONTEND_DIST_DIR = _default_path("FRONTEND_DIST_DIR", "frontend/dist", "/app/frontend/dist")
 
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
@@ -25,6 +26,7 @@ ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 USE_SUPABASE = bool(SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY)
+REQUIRE_SUPABASE = APP_ENV == "production" or RUNNING_ON_VERCEL
 
 # Gmail SMTP
 GMAIL_USER = os.getenv("GMAIL_USER", "")

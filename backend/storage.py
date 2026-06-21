@@ -19,6 +19,20 @@ def using_supabase() -> bool:
     return bool(config.USE_SUPABASE and create_client)
 
 
+def _require_storage_backend():
+    if using_supabase() or not config.REQUIRE_SUPABASE:
+        return
+    missing = []
+    if not config.SUPABASE_URL:
+        missing.append("SUPABASE_URL")
+    if not config.SUPABASE_SERVICE_ROLE_KEY:
+        missing.append("SUPABASE_SERVICE_ROLE_KEY")
+    if create_client is None:
+        missing.append("supabase Python package")
+    detail = ", ".join(missing) if missing else "Supabase client initialization"
+    raise RuntimeError(f"운영 환경에서는 Supabase 설정이 필요합니다. 확인 항목: {detail}")
+
+
 def client():
     global _client
     if not using_supabase():
@@ -285,6 +299,7 @@ def set_default_draft_id(draft_id: str | None) -> bool:
 # ========== Unsubscribed ==========
 
 def load_unsubscribed() -> set[str]:
+    _require_storage_backend()
     if not using_supabase():
         if not UNSUB.exists():
             return set()
@@ -297,6 +312,7 @@ def add_unsubscribed(email: str) -> bool:
     email = email.strip().lower()
     if not email or "@" not in email:
         return False
+    _require_storage_backend()
     if not using_supabase():
         UNSUB.parent.mkdir(parents=True, exist_ok=True)
         existing = load_unsubscribed()
@@ -317,6 +333,7 @@ def add_unsubscribed(email: str) -> bool:
 
 def remove_unsubscribed(email: str) -> bool:
     email = email.strip().lower()
+    _require_storage_backend()
     if not using_supabase():
         if not UNSUB.exists():
             return False
@@ -328,6 +345,7 @@ def remove_unsubscribed(email: str) -> bool:
 
 
 def export_unsubscribed_csv() -> str:
+    _require_storage_backend()
     buf = io.StringIO()
     writer = csv.DictWriter(buf, fieldnames=_UNSUB_HEADER)
     writer.writeheader()
