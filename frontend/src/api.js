@@ -1,4 +1,14 @@
-const J = (r) => r.ok ? r.json() : r.text().then(t => Promise.reject(new Error(t)));
+const apiError = async (r) => {
+  const text = await r.text();
+  try {
+    const parsed = JSON.parse(text);
+    return Promise.reject(new Error(parsed.detail || parsed.message || text));
+  } catch {
+    return Promise.reject(new Error(text));
+  }
+};
+
+const J = (r) => r.ok ? r.json() : apiError(r);
 
 export const api = {
   templates: () => fetch('/api/templates').then(J),

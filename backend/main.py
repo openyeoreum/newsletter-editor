@@ -198,7 +198,7 @@ EMAIL_HEADER_KEYS = {
     "수신이메일",
     "수신자이메일",
 }
-NAME_HEADER_KEYS = {"name", "fullname", "recipient", "recipientname", "이름", "성명", "수신자", "받는사람"}
+NAME_HEADER_KEYS = {"name", "fullname", "recipient", "recipientname", "이름", "성명", "성함", "수신자", "받는사람"}
 
 
 def _clean_cell(value) -> str:
@@ -378,6 +378,16 @@ def _filter_recipient_bytes(filename: str, content: bytes, unsubscribed: set[str
     }
 
 
+def _load_unsubscribed_or_error() -> set[str]:
+    try:
+        return storage.load_unsubscribed()
+    except Exception as exc:
+        raise HTTPException(
+            503,
+            f"수신거부 명단을 불러오지 못했습니다. Supabase 환경변수와 서비스 키를 확인해 주세요. ({exc})",
+        )
+
+
 def _aggregate_filter_results(files: list[dict]) -> dict:
     counts = {"total": 0, "kept": 0, "unsubscribed": 0, "duplicate": 0, "invalid": 0}
     for result in files:
@@ -398,7 +408,7 @@ def _filter_upload(filename: str, content: bytes) -> dict:
     if not lower.endswith(supported):
         raise HTTPException(400, "지원 포맷: CSV, TXT, Excel(.xlsx/.xlsm), ZIP")
 
-    unsubscribed = storage.load_unsubscribed()
+    unsubscribed = _load_unsubscribed_or_error()
     if lower.endswith(FILTER_ARCHIVE_EXTENSIONS):
         members = _zip_supported_members(content)
         if not members:
@@ -840,7 +850,7 @@ def unsubscribe_submit(email: str = Form(...)):
 
 @app.get("/api/unsubscribed")
 def list_unsubscribed():
-    return {"emails": sorted(storage.load_unsubscribed())}
+    return {"emails": sorted(_load_unsubscribed_or_error())}
 
 
 @app.get("/api/unsubscribed/export")

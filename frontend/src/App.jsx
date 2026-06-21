@@ -79,6 +79,7 @@ export default function App() {
   const [testEmail, setTestEmail] = useState('');
   const [unsubModal, setUnsubModal] = useState(false);
   const [unsubList, setUnsubList] = useState([]);
+  const [unsubError, setUnsubError] = useState('');
   const [subModal, setSubModal] = useState(false);
   const [subList, setSubList] = useState([]);
   const [sendJob, setSendJob] = useState(null); // 진행 중 작업 정보
@@ -138,7 +139,9 @@ export default function App() {
   }, []);
 
   const refreshDrafts = () => api.drafts().then(setDrafts).catch(() => {});
-  const refreshUnsub = () => api.unsubscribed().then(r => setUnsubList(r.emails || [])).catch(() => {});
+  const refreshUnsub = () => api.unsubscribed()
+    .then(r => { setUnsubList(r.emails || []); setUnsubError(''); })
+    .catch(e => { setUnsubError(e.message || '수신거부 명단을 불러오지 못했습니다.'); });
   const refreshSubs = () => api.subscribers().then(r => setSubList(r.subscribers || [])).catch(() => {});
 
   useEffect(() => {
@@ -884,7 +887,7 @@ export default function App() {
                 <p className="muted" style={{ marginBottom: 8 }}>수신거부한 이메일은 발송 시 자동으로 제외됩니다.</p>
                 <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
                   <button className="secondary" style={{ flex: 1 }} onClick={() => { refreshUnsub(); setUnsubModal(true); }}>
-                    <Icon name="drafts" size={14}/> 명단 보기 ({unsubList.length}명)
+                    <Icon name="drafts" size={14}/> {unsubError ? '명단 로드 실패' : `명단 보기 (${unsubList.length}명)`}
                   </button>
                   <button className="secondary" style={{ flex: 1 }} onClick={async () => {
                     const blob = await api.exportUnsubscribed();
@@ -898,6 +901,9 @@ export default function App() {
                 <button className="secondary sm" style={{ width: '100%' }} onClick={() => {
                   window.open(`${location.origin}/api/unsubscribe`, '_blank');
                 }}><Icon name="eye" size={12}/> 수신거부 미리보기</button>
+                {unsubError && (
+                  <div className="filter-error">{unsubError}</div>
+                )}
               </div>
 
               <div className="dispatch-card">
