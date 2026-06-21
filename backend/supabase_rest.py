@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import json
-from urllib.error import HTTPError
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+
+import httpx
 
 from . import config
 
@@ -13,6 +13,16 @@ class SupabaseRestError(RuntimeError):
         self.status = status
         self.body = body
         super().__init__(f"Supabase REST error {status}: {body}")
+
+
+_client: httpx.Client | None = None
+
+
+def _http() -> httpx.Client:
+    global _client
+    if _client is None:
+        _client = httpx.Client(timeout=25.0, trust_env=False)
+    return _client
 
 
 def _base_url(table: str, params: dict | None = None) -> str:
@@ -36,17 +46,17 @@ def _headers(prefer: str | None = None) -> dict:
 
 
 def request(method: str, table: str, params: dict | None = None, payload=None, prefer: str | None = None):
-    data = None if payload is None else json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    req = Request(_base_url(table, params), data=data, method=method, headers=_headers(prefer))
+    body = None if payload is None else json.dumps(payload, ensure_ascii=False)
     try:
-        with urlopen(req, timeout=25) as response:
-            body = response.read().decode("utf-8")
-    except HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace")
-        raise SupabaseRestError(exc.code, body) from exc
-    if not body:
+        response = _http().request(method, _base_url(table, params), content=body, headers=_headers(prefer))
+        response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        raise SupabaseRestError(exc.response.status_code, exc.response.text) from exc
+    except httpx.RequestError as exc:
+        raise RuntimeError(f"Supabase REST request failed: {exc}") from exc
+    if not response.content:
         return []
-    return json.loads(body)
+    return response.json()
 
 
 def select(table: str, columns: str = "*", filters: dict | None = None, order: str | None = None, limit: int | None = None):
